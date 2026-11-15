@@ -21,7 +21,8 @@ Requires Python 3.11 or 3.12.
 
 ```bash
 # 1. clone
-git clone <REPO_URL> pocket-sommelier && cd pocket-sommelier
+git clone https://github.com/romainarc/Project_Recommender_Systems_Winder-Pocket-Sommelier.git
+cd Project_Recommender_Systems_Winder-Pocket-Sommelier
 
 # 2. virtual environment
 python -m venv .venv
