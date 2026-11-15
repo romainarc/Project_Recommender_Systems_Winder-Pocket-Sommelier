@@ -99,3 +99,7 @@ pocket-sommelier/
 │   └── db/schema.py                interactions, impressions (SQLAlchemy)
 └── tests/                          pytest
 ```
+
+## License
+
+Code: [MIT](LICENSE). Data: X-Wines, CC0-1.0.
