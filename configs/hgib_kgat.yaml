@@ -1,0 +1,14 @@
+model: hgib_kgat
+behaviors: [rated, liked]        # HGIB cascade, last = target
+embedding_dim: 64
+kgat_layer_dims: [64, 32, 16]
+dropout: 0.1
+hsic_beta: 0.1                   # weight of the information-bottleneck (HSIC) term
+use_gre: true                    # graph refinement encoder (learnable edge dropout)
+lambda_kg: 0.1                   # TransR loss weight
+dish_lambda: 0.5                 # dish-context weight at serving, tuned on validation
+lr: 0.001
+batch_size: 2048
+epochs: 50
+early_stopping_patience: 5
+seed: 42
