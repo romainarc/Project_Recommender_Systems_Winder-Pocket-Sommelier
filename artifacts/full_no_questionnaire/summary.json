@@ -1,0 +1,5 @@
+{
+  "best_epoch": 9,
+  "best_valid_ndcg10": 0.019650279798394343,
+  "epochs_run": 14
+}

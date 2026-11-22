@@ -11,3 +11,14 @@ artifacts/*
 !artifacts/.gitkeep
 *.db
 .DS_Store
+
+# Shipped with the repository (small files, so the report numbers and the V1 demo are reproducible):
+# the V1 processed split (~6 MB) and the trained V1 models (~2 MB each: weights, config, curves).
+!data/processed/full/
+!artifacts/full/
+!artifacts/full_no_questionnaire/
+!artifacts/full_no_hgib/
+!artifacts/full_d64/
+!artifacts/results_full/
+artifacts/*/train.log
+artifacts/*/*.log
