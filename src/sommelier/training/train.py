@@ -23,6 +23,19 @@ from sommelier.evaluation.harness import evaluate
 from sommelier.models.hgib import HGIBKGAT
 
 
+REPO_ROOT = Path(__file__).resolve().parents[3]
+
+
+def portable_path(path):
+    """Path relative to the repository when it is inside it, so a saved model (config.json)
+    works on any machine that clones the repository."""
+    p = Path(path).resolve()
+    try:
+        return str(p.relative_to(REPO_ROOT))
+    except ValueError:
+        return str(p)
+
+
 def make_score_fn(model):
     """Run the graph once, then score users with a dot product (used by the harness)."""
     model.eval()
@@ -75,7 +88,7 @@ def train(data_dir, out_dir, epochs=30, batch_size=16384, lr=5e-3, dim=64, beta=
 
     ds = load_processed(data_dir)
     ckg = ds.ckg
-    config = dict(data_dir=str(data_dir), epochs=epochs, batch_size=batch_size, lr=lr, dim=dim,
+    config = dict(data_dir=portable_path(data_dir), epochs=epochs, batch_size=batch_size, lr=lr, dim=dim,
                   beta=beta, lambda_kg=lambda_kg, patience=patience, seed=seed,
                   use_questionnaire=use_questionnaire, use_hgib=use_hgib, use_gre=use_gre)
     (out / "config.json").write_text(json.dumps(config, indent=2))
