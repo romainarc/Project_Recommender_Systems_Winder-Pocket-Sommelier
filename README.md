@@ -25,8 +25,9 @@ Dataset: [X-Wines](https://github.com/rogerioxavier/X-Wines) (CC0-1.0).
 Uses the small X-Wines Test version committed in `data/sample/`. Python 3.11 or 3.12.
 
 ```bash
-git clone <REPO_URL> pocket-sommelier && cd pocket-sommelier
-python -m venv .venv
+git clone https://github.com/romainarc/Project_Recommender_Systems_Winder-Pocket-Sommelier.git pocket-sommelier
+cd pocket-sommelier
+python3 -m venv .venv                  # Windows: python -m venv .venv
 source .venv/bin/activate              # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 
@@ -40,9 +41,13 @@ python scripts/train.py --data data/processed/test --out artifacts/test --batch-
 MODEL_DIR=artifacts/test DATA_DIR=data/processed/test uvicorn api.main:app
 #   Windows PowerShell: $env:MODEL_DIR="artifacts/test"; $env:DATA_DIR="data/processed/test"; uvicorn api.main:app
 
-# 4. app (terminal 2)  ->  http://localhost:8501
+# 4. app (terminal 2, same folder, activate .venv again)  ->  http://localhost:8501
 streamlit run app/streamlit_app.py
+#   port already in use? add: --server.port 8502
 ```
+
+In the app: fill the questionnaire, click **Save my taste**, pick a dish, then like a wine and
+watch the list change. Everything is logged in `artifacts/sommelier.db`.
 
 Checks: `python -m pytest -q`
 
@@ -62,13 +67,40 @@ Checks: `python -m pytest -q`
    python scripts/train.py --data data/processed/full --out artifacts/full --batch-size 8192 --lr 0.01 --patience 5
    ```
    Ablations: add `--no-questionnaire`, `--no-hgib` or `--no-gre` (and another `--out`).
-4. Evaluate on the test split (table + feedback curve), then the qualitative check:
+4. Choose the weight of the questionnaire bonus on the **validation** split (served score =
+   standardised model score + weight × number of answers the wine matches; it makes the list
+   respect the colour / body asked for):
+   ```bash
+   python scripts/tune_bonus.py --model artifacts/full --data data/processed/full
+   ```
+   The chosen weight is the default `DEFAULT_QUESTIONNAIRE_WEIGHT` in
+   `src/sommelier/serving/predict.py` (override with `QUESTIONNAIRE_WEIGHT=...`).
+5. Evaluate on the test split (table with colour / body match + feedback curve), then the
+   qualitative check:
    ```bash
    python scripts/evaluate.py --data data/processed/slim --models artifacts/slim artifacts/slim_no_questionnaire artifacts/slim_no_hgib --out artifacts/results_slim
    python scripts/sample_users.py --model artifacts/slim --data data/processed/slim
    ```
-5. Serve a trained model: set `MODEL_DIR` and `DATA_DIR` (default `artifacts/slim`,
+6. Serve a trained model: set `MODEL_DIR` and `DATA_DIR` (default `artifacts/slim`,
    `data/processed/slim`) and start the API and the app as in the quick start.
+
+## Trained V1 models (in the repository)
+
+The V1 split (`data/processed/full/`, ~6 MB) and the trained V1 models (~2 MB each) are
+committed, so the demo runs without retraining:
+
+| Folder | What it is |
+|---|---|
+| `artifacts/full/` | main model (HGIB-KGAT, questionnaire on), dim 32 |
+| `artifacts/full_no_questionnaire/` | ablation: questionnaire edges switched off |
+| `artifacts/full_no_hgib/` | ablation: HGIB cascade switched off |
+
+Each folder holds `model.pt`, `config.json`, `history.json`, `summary.json` and `curves.png`.
+Serve the main model:
+
+```bash
+MODEL_DIR=artifacts/full DATA_DIR=data/processed/full uvicorn api.main:app
+```
 
 ## Data and evaluation protocol
 
