@@ -57,6 +57,17 @@ payload = {"user_id": user_id, "dish": None if dish == "(any)" else dish, "k": 1
 res = requests.post(f"{API}/recommend", json=payload, timeout=30).json()
 st.caption(f"model {res['model_version']} · answered in {res['latency_ms']:.0f} ms · user {user_id}")
 
+def log_event(user_id, wine_id, event_type, label, dish):
+    """Button callback (idea from PR #2): it runs BEFORE Streamlit's rerun, so the click is
+    always logged, and the rerun that follows shows the updated list."""
+    try:
+        requests.post(f"{API}/log_interaction", timeout=30, json={
+            "user_id": user_id, "wine_id": wine_id, "event_type": event_type, "dish": dish})
+        st.toast(f"{label} saved, your list is updated")
+    except requests.RequestException:
+        st.toast("Could not reach the API, feedback not saved")
+
+
 for w in res["wines"]:
     with st.container(border=True):
         st.markdown(f"**{w['name']}** · {w['type']} · {w.get('body') or ''} · "
@@ -65,9 +76,5 @@ for w in res["wines"]:
         c1, c2, c3 = st.columns(3)
         for col, evt, label in ((c1, "like", "👍 like"), (c2, "dislike", "👎 dislike"),
                                 (c3, "add_to_cellar", "🍾 cellar")):
-            if col.button(label, key=f"{evt}-{w['wine_id']}"):
-                requests.post(f"{API}/log_interaction", timeout=30, json={
-                    "user_id": user_id, "wine_id": w["wine_id"], "event_type": evt,
-                    "dish": payload["dish"]})
-                st.toast(f"{label} saved, your list is updated")
-                st.rerun()
+            col.button(label, key=f"{evt}-{w['wine_id']}", on_click=log_event,
+                       args=(user_id, w["wine_id"], evt, label, payload["dish"]))
