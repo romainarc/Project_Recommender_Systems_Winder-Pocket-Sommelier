@@ -91,9 +91,14 @@ committed, so the demo runs without retraining:
 
 | Folder | What it is |
 |---|---|
-| `artifacts/full/` | main model (HGIB-KGAT, questionnaire on), dim 32 |
-| `artifacts/full_no_questionnaire/` | ablation: questionnaire edges switched off |
-| `artifacts/full_no_hgib/` | ablation: HGIB cascade switched off |
+| `artifacts/full/` | served model (HGIB-KGAT, questionnaire on), dim 32, laptop run |
+| `artifacts/full_no_questionnaire/` | ablation of `full`: questionnaire edges switched off |
+| `artifacts/full_no_hgib/` | ablation of `full`: HGIB cascade switched off |
+| `artifacts/full_colab/` | Colab run, dim 64: the V1 numbers of the Week 3 report table (`artifacts/results_full_colab/`) |
+| `artifacts/full_d64/` | laptop re-run of the Colab settings (dim 64): best epoch 11, valid NDCG@10 0.019 |
+
+Test results: `artifacts/results_full/` (served model, ablations, colour / body match, feedback curve)
+and `artifacts/results_full_colab/` (Colab model).
 
 Each folder holds `model.pt`, `config.json`, `history.json`, `summary.json` and `curves.png`.
 Serve the main model:

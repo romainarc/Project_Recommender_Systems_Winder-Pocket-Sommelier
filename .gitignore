@@ -19,6 +19,8 @@ artifacts/*
 !artifacts/full_no_questionnaire/
 !artifacts/full_no_hgib/
 !artifacts/full_d64/
+!artifacts/full_colab/
+!artifacts/results_full_colab/
 !artifacts/results_full/
 artifacts/*/train.log
 artifacts/*/*.log
