@@ -120,3 +120,25 @@ def test_api_real_model_and_logging(tmp_path, tiny_model):
     with main.Session() as s:
         assert s.query(Interaction).count() == 1
         assert s.query(QuestionnaireAnswer).count() == 1
+
+
+def test_questionnaire_bonus_ranks_matching_wines_first():
+    from sommelier.models.baselines import questionnaire_adherence, questionnaire_bonus
+    attrs = {"type": np.array(["Red", "White", "Red", "White"], dtype=object),
+             "body": np.array(["Full-bodied", "Light-bodied", "Light-bodied", "Full-bodied"], dtype=object),
+             "acidity": np.array([None] * 4, dtype=object), "grapes": [[]] * 4,
+             "country": np.array(["France"] * 4, dtype=object)}
+    model_scores = np.array([0.1, 0.9, 0.2, 0.8])            # the model prefers the whites
+    answers = {"color": "Red", "body": float("nan"), "grapes": np.array([])}   # parquet-like row
+    assert np.array_equal(questionnaire_bonus(model_scores, answers, attrs, 0), model_scores)
+    top = np.argsort(-questionnaire_bonus(model_scores, answers, attrs, 3.0))[:2]
+    assert set(top) == {0, 2}                                 # the two reds come first
+    assert questionnaire_adherence(top, answers, attrs) == {"color": 1.0}   # body not answered
+
+
+def test_served_list_respects_the_colour(tiny_model):
+    from sommelier.serving.predict import Recommender
+    rec = Recommender(tiny_model, PROCESSED, n_guests=2, questionnaire_weight=5.0)
+    rec.onboard("g", {"color": "Red"})
+    wines = rec.recommend("g", k=5)
+    assert all(w["type"] == "Red" for w in wines)

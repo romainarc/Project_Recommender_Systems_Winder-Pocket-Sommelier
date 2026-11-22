@@ -49,25 +49,34 @@ def wine_table(recs, liked_ids=None):
     return lines
 
 
-def summary(recs, n_wines):
+def summary(recs, n_wines, answers=None):
     types = len({r["type"] for r in recs})
     countries = len({r["country"] for r in recs})
     mean_rank = sum(r["popularity_rank"] for r in recs) / len(recs)
-    return (f"{types} wine types, {countries} countries; mean popularity rank {mean_rank:.0f} "
+    text = (f"{types} wine types, {countries} countries; mean popularity rank {mean_rank:.0f} "
             f"of {n_wines} wines")
+    answers = answers or {}
+    for key, field in (("color", "type"), ("body", "body")):
+        if isinstance(answers.get(key), str):      # does the list respect the answer?
+            n = sum(r[field] == answers[key] for r in recs)
+            text += f"; {key} asked ({answers[key]}) in {n}/{len(recs)}"
+    return text
 
 
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--model", default="artifacts/slim")
     p.add_argument("--data", default="data/processed/slim")
+    p.add_argument("--weight", type=float, default=None,
+                   help="questionnaire bonus weight (default: the served one; 0 = pure model)")
     p.add_argument("--dish", default="Poultry", help="dish for the two-new-users demo (one that suits reds and whites)")
     a = p.parse_args()
 
-    rec = Recommender(ROOT / a.model, ROOT / a.data)
+    rec = Recommender(ROOT / a.model, ROOT / a.data, questionnaire_weight=a.weight)
     ds = rec.ds
     n_wines = ds.ckg.n_wines
-    lines = [f"# Qualitative sanity check ({Path(a.model).name})", ""]
+    lines = [f"# Qualitative sanity check ({Path(a.model).name}, questionnaire weight "
+             f"{rec.questionnaire_weight})", ""]
 
     # 3 test users with different favourite colours and at least 3 liked test wines
     chosen, colours = [], set()
@@ -93,7 +102,7 @@ def main():
                   f"Questionnaire: {answers_text(row)}  ",
                   f"Train history: {len(ds.train_seen.get(u, ()))} rated wines. "
                   f"Liked in the test period: {len(liked_ids)} wines, {hits} of them in the top 10 (✓).  ",
-                  f"List: {summary(recs, n_wines)}.", ""]
+                  f"List: {summary(recs, n_wines, row)}.", ""]
         lines += wine_table(recs, liked_ids) + [""]
 
     # same dish, two opposite questionnaires
@@ -104,14 +113,14 @@ def main():
     common = len({r["wine_id"] for r in ra} & {r["wine_id"] for r in rb})
     lines += [f"## Same dish ({a.dish}), two new users with opposite questionnaires", "",
               f"Wines in common in the two top-10 lists: {common} of 10.", "",
-              f"### New user A: {answers_text(ALICE)}", f"List: {summary(ra, n_wines)}.", ""]
+              f"### New user A: {answers_text(ALICE)}", f"List: {summary(ra, n_wines, ALICE)}.", ""]
     lines += wine_table(ra) + ["", f"### New user B: {answers_text(BOB)}",
-                               f"List: {summary(rb, n_wines)}.", ""]
+                               f"List: {summary(rb, n_wines, BOB)}.", ""]
     lines += wine_table(rb) + [""]
 
     text = "\n".join(lines)
     print(text)
-    out = ROOT / a.model / "sample_users.md"
+    out = ROOT / a.model / (f"sample_users_w{a.weight:g}.md" if a.weight is not None else "sample_users.md")
     out.write_text(text, encoding="utf-8")
     print(f"\nsaved {out}")
 

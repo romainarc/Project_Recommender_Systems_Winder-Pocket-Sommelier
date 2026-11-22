@@ -14,7 +14,11 @@ import torch
 from sommelier.data.loaders import load_processed
 from sommelier.data.questionnaire import answer_entities
 from sommelier.graph.build_ckg import QUESTIONNAIRE_RELATIONS, KG_RELATIONS, CKG
-from sommelier.models.baselines import dish_wines_mask, wine_attributes
+from sommelier.models.baselines import dish_wines_mask, questionnaire_bonus, wine_attributes
+
+# Weight of the questionnaire bonus at serving time (see questionnaire_bonus). Chosen on the
+# VALIDATION split with scripts/tune_bonus.py; override with the QUESTIONNAIRE_WEIGHT variable.
+DEFAULT_QUESTIONNAIRE_WEIGHT = 0.5
 from sommelier.models.hgib import HGIBKGAT
 
 
@@ -23,7 +27,10 @@ def load_model(model_dir, ds=None, ckg=None):
     model_dir = Path(model_dir)
     config = json.loads((model_dir / "config.json").read_text())
     if ds is None:
-        ds = load_processed(config["data_dir"])
+        data_dir = Path(config["data_dir"])
+        if not data_dir.is_absolute():                 # saved relative to the repository
+            data_dir = Path(__file__).resolve().parents[3] / data_dir
+        ds = load_processed(data_dir)
     dim = config["dim"]
     model = HGIBKGAT(ckg if ckg is not None else ds.ckg, dim=dim,
                      layer_dims=(dim, dim // 2, dim // 4), beta=config["beta"],
@@ -68,7 +75,11 @@ def with_guest_slots(ckg, n_guests):
 class Recommender:
     """Recommendations for X-Wines users and for new app users (guests)."""
 
-    def __init__(self, model_dir, data_dir, n_guests=200):
+    def __init__(self, model_dir, data_dir, n_guests=200, questionnaire_weight=None):
+        if questionnaire_weight is None:
+            questionnaire_weight = float(os.environ.get("QUESTIONNAIRE_WEIGHT",
+                                                        DEFAULT_QUESTIONNAIRE_WEIGHT))
+        self.questionnaire_weight = questionnaire_weight
         self.ds = load_processed(data_dir)
         base = self.ds.ckg
         self.n_real = base.n_users
@@ -161,11 +172,14 @@ class Recommender:
         """Top-k wines: model score, wines listed for the dish first, seen wines removed."""
         node, seen = self._user_node(user_id)
         wines = self.Z[self.ckg.n_users:self.ckg.n_users + self.ckg.n_wines]
+        answers = self.guests.get(user_id, {}).get("answers") or self._answers_of(node)
         if node is None:                      # unknown user, no questionnaire: popularity
             scores = self.popularity.astype(float)
         else:
             with torch.no_grad():
                 scores = (self.Z[node] @ wines.T).numpy().astype(float)
+            # make the explicit answers count: a "red, full-bodied" user gets reds first
+            scores = questionnaire_bonus(scores, answers, self.attrs, self.questionnaire_weight)
         if dish:
             if dish not in self.dish_masks:
                 self.dish_masks[dish] = dish_wines_mask(dish, self.attrs)
@@ -173,7 +187,6 @@ class Recommender:
         for w in seen:
             scores[w] = -np.inf
         top = np.argsort(-scores)[:k]
-        answers = self.guests.get(user_id, {}).get("answers") or self._answers_of(node)
         return [self.describe(int(w), dish, answers) for w in top]
 
     def _answers_of(self, node):

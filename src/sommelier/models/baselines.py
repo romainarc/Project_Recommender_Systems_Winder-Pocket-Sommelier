@@ -65,6 +65,49 @@ def questionnaire_match(answers, attrs):
     return match
 
 
+def clean_answers(answers):
+    """Questionnaire answers with removed / empty values dropped (a parquet row gives NaN
+    for a removed answer and numpy arrays for lists)."""
+    from sommelier.data.questionnaire import as_list, is_answer
+    answers = answers or {}
+    out = {k: answers.get(k) for k in ("color", "body", "acidity") if is_answer(answers.get(k))}
+    out["grapes"] = as_list(answers.get("grapes"))
+    out["countries"] = as_list(answers.get("countries"))
+    return out
+
+
+def questionnaire_bonus(scores, answers, attrs, weight):
+    """Model scores + weight x (number of questionnaire answers the wine matches).
+
+    The model scores of each user are standardised first (mean 0, std 1) so that `weight`
+    means the same thing for every user and every model: weight = 1 lets one matching
+    answer move a wine up by one standard deviation of the model scores. weight = 0 gives
+    back the pure model ranking. Works on one user (1-D) or a batch (2-D, one answers dict
+    per row).
+    """
+    if weight == 0:
+        return scores
+    s = np.atleast_2d(np.asarray(scores, dtype=float))
+    answers_list = answers if isinstance(answers, list) else [answers]
+    out = np.empty_like(s)
+    for row in range(s.shape[0]):
+        std = s[row].std() or 1.0
+        z = (s[row] - s[row].mean()) / std
+        out[row] = z + weight * questionnaire_match(clean_answers(answers_list[row]), attrs)
+    return out if np.ndim(scores) == 2 else out[0]
+
+
+def questionnaire_adherence(top, answers, attrs, keys=("color", "body")):
+    """Share of the recommended wines that match each given answer (None if not answered)."""
+    a = clean_answers(answers)
+    field = {"color": "type", "body": "body", "acidity": "acidity"}
+    result = {}
+    for key in keys:
+        if key in a:
+            result[key] = float(np.mean([attrs[field[key]][w] == a[key] for w in top]))
+    return result
+
+
 def dish_wines_mask(dish, attrs):
     """True for the wines whose Harmonize list contains the dish."""
     return np.array([dish in d for d in attrs["dishes"]])
