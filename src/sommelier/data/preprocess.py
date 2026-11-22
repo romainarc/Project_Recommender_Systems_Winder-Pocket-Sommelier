@@ -18,6 +18,7 @@ from dataclasses import dataclass, asdict
 from pathlib import Path
 
 import pandas as pd
+from sommelier.data.questionnaire import simulate as simulate_questionnaires 
 
 RATING_COLS = ["UserID", "WineID", "Rating", "Date"]
 LIKE_THRESHOLD = 4.0
@@ -135,6 +136,10 @@ def run(wines_path, ratings_path, out_dir, cfg: PrepConfig) -> dict:
     test.to_parquet(out / "test.parquet", index=False)
     wines.to_parquet(out / "wines.parquet", index=False)
 
+    # simulated questionnaires, from TRAIN only (no leakage)                    
+    questionnaires = simulate_questionnaires(train, wines)                      
+    questionnaires.to_parquet(out / "questionnaires.parquet", index=False)      
+
     stats = {
         "config": asdict(cfg),
         "ratings_read": n_raw,
@@ -147,6 +152,7 @@ def run(wines_path, ratings_path, out_dir, cfg: PrepConfig) -> dict:
         "valid_liked_warm": len(valid),
         "test_liked_warm": len(test),
         "dishes": int(wines["Harmonize"].explode().nunique()),
+        "questionnaires": len(questionnaires),
         **split_info,
     }
     (out / "stats.json").write_text(json.dumps(stats, indent=2))

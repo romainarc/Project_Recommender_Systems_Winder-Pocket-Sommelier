@@ -22,3 +22,93 @@ def most_popular_for_dish_scorer(train_liked_wines: np.ndarray, n_wines: int, di
     listed[dish_wines] = True
     boosted = np.where(listed, pop + 1e6, pop)
     return lambda users: np.tile(boosted, (len(users), 1))
+
+
+# ---------------------------------------------------------------------------
+# Baselines for the new framing: what a simple query or rule can already do.
+# ---------------------------------------------------------------------------
+
+def wine_attributes(wines, wine_index):
+    """Wine attributes as lists ordered by local wine id (to match a questionnaire fast)."""
+    n = len(wine_index)
+    types, bodies, acidities = [None] * n, [None] * n, [None] * n
+    grapes, countries, dishes = [[]] * n, [None] * n, [[]] * n
+    for row in wines.itertuples(index=False):
+        i = wine_index[int(row.WineID)]
+        types[i] = row.Type
+        bodies[i] = row.Body
+        acidities[i] = row.Acidity
+        grapes[i] = list(row.Grapes)
+        countries[i] = row.Country
+        dishes[i] = list(row.Harmonize)
+    return {"type": np.array(types, dtype=object), "body": np.array(bodies, dtype=object),
+            "acidity": np.array(acidities, dtype=object), "grapes": grapes,
+            "country": np.array(countries, dtype=object), "dishes": dishes}
+
+
+def questionnaire_match(answers, attrs):
+    """Number of questionnaire answers each wine matches (0 to 5), as a numpy array."""
+    n = len(attrs["type"])
+    match = np.zeros(n)
+    if isinstance(answers.get("color"), str):
+        match += attrs["type"] == answers["color"]
+    if isinstance(answers.get("body"), str):
+        match += attrs["body"] == answers["body"]
+    if isinstance(answers.get("acidity"), str):
+        match += attrs["acidity"] == answers["acidity"]
+    liked_grapes = set(answers.get("grapes") if answers.get("grapes") is not None else [])
+    if liked_grapes:
+        match += np.array([len(liked_grapes.intersection(g)) > 0 for g in attrs["grapes"]])
+    liked_countries = set(answers.get("countries") if answers.get("countries") is not None else [])
+    if liked_countries:
+        match += np.array([c in liked_countries for c in attrs["country"]])
+    return match
+
+
+def dish_wines_mask(dish, attrs):
+    """True for the wines whose Harmonize list contains the dish."""
+    return np.array([dish in d for d in attrs["dishes"]])
+
+
+def dish_scorer(train_liked_wines, n_wines, attrs, user_dish):
+    """"Dish -> wines" query: wines listed for the user's dish, most popular first."""
+    pop = np.bincount(train_liked_wines, minlength=n_wines).astype(float)
+    masks = {}
+
+    def score(users):
+        out = np.tile(pop, (len(users), 1))
+        for row, u in enumerate(users):
+            dish = user_dish.get(int(u))
+            if dish is None:
+                continue
+            if dish not in masks:
+                masks[dish] = dish_wines_mask(dish, attrs)
+            out[row] += masks[dish] * 1e6
+        return out
+    return score
+
+
+def questionnaire_scorer(train_liked_wines, n_wines, attrs, user_answers, user_dish=None):
+    """Rule-based "dish + questionnaire -> filter -> popularity".
+
+    Wines listed for the dish first, then the wines matching the most answers, then by
+    popularity. Without user_dish it is "questionnaire -> popularity".
+    """
+    pop = np.bincount(train_liked_wines, minlength=n_wines).astype(float)
+    pop = pop / (pop.max() + 1)          # between 0 and 1: only breaks ties
+    masks = {}
+
+    def score(users):
+        out = np.tile(pop, (len(users), 1))
+        for row, u in enumerate(users):
+            answers = user_answers.get(int(u))
+            if answers is not None:
+                out[row] += questionnaire_match(answers, attrs)
+            if user_dish is not None:
+                dish = user_dish.get(int(u))
+                if dish is not None:
+                    if dish not in masks:
+                        masks[dish] = dish_wines_mask(dish, attrs)
+                    out[row] += masks[dish] * 100
+        return out
+    return score

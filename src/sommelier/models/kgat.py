@@ -32,6 +32,7 @@ class KGATLayer(nn.Module):
         self.drop = nn.Dropout(dropout)
 
     def forward(self, x, head, tail, att):
+        """att: one weight per edge (head <- tail). e_N(h) = sum of att * e_t over neighbours."""
         msg = x[tail] * att.unsqueeze(-1)
         e_n = torch.zeros_like(x).index_add_(0, head, msg)
         out = F.leaky_relu(self.w1(x + e_n)) + F.leaky_relu(self.w2(x * e_n))
@@ -39,7 +40,13 @@ class KGATLayer(nn.Module):
 
 
 class KGATEncoder(nn.Module):
-    """L KGAT layers. Input: node embeddings. Output: concatenation of all layers."""
+    """L KGAT layers. Input: node embeddings. Output: concatenation of all layers.
+
+    As in the original KGAT implementation, the attention weights are computed WITHOUT
+    gradient: W_r and the relation embeddings learn through the TransR loss, and the
+    attention is recomputed from them at every forward. Without this, autograd would keep
+    several [edges x 64] tensors per relation and run out of memory on the Full graph.
+    """
 
     def __init__(self, n_relations_total: int, dim: int = 64, rel_dim: int = 64,
                  layer_dims=(64, 32, 16), dropout: float = 0.1):
@@ -53,22 +60,22 @@ class KGATEncoder(nn.Module):
                                     for i in range(len(layer_dims)))
         self.out_dim = sum(dims)
 
-    def attention(self, x, head, rel, tail, edge_weight=None):
-        # loop over relations: memory O(E * k) instead of O(E * d * k)
+    @torch.no_grad()
+    def attention(self, x, head, rel, tail):
+        """pi(h, r, t) = (W_r e_t)^T tanh(W_r e_h + e_r), softmax over the neighbours of h."""
         score = torch.empty(head.shape[0], device=x.device)
-        for r in rel.unique():
+        for r in rel.unique():                     # one relation at a time: low memory
             m = rel == r
             Wr = self.W_r[r]
             r_h = x[head[m]] @ Wr
             r_t = x[tail[m]] @ Wr
             score[m] = (r_t * torch.tanh(r_h + self.rel_emb.weight[r])).sum(-1)
-        att = segment_softmax(score, head, x.shape[0])
-        if edge_weight is not None:                              # HGIB graph refinement mask
-            att = att * edge_weight
-        return att
+        return segment_softmax(score, head, x.shape[0])
 
     def forward(self, x, head, rel, tail, edge_weight=None):
-        att = self.attention(x, head, rel, tail, edge_weight)
+        att = self.attention(x, head, rel, tail)
+        if edge_weight is not None:                # HGIB graph refinement (keeps its gradient)
+            att = att * edge_weight
         outs = [x]
         h = x
         for layer in self.layers:
