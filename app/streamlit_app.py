@@ -18,7 +18,7 @@ API = os.environ.get("API_URL", "http://localhost:8000")
 
 st.set_page_config(page_title="Pocket Sommelier", layout="wide", initial_sidebar_state="expanded")
 
-# ------------------------------------------------------------------ style
+#  style CSS
 st.markdown("""
 <style>
 .block-container { padding-top: 3.2rem; max-width: 1200px; }
@@ -49,7 +49,7 @@ div.stButton > button { border-radius: 999px; font-size: .82rem; padding: .2rem 
 </style>
 """, unsafe_allow_html=True)
 
-# ------------------------------------------------------------------ API
+# API
 try:
     options = requests.get(f"{API}/options", timeout=10).json()
     health = requests.get(f"{API}/health", timeout=10).json()
@@ -63,7 +63,7 @@ if "user_id" not in st.session_state:
     st.session_state.feedback = 0
 user_id = st.session_state.user_id
 
-# ------------------------------------------------------------------ 1. questionnaire (sidebar)
+# 1. questionnaire (sidebar)
 with st.sidebar:
     st.markdown("## Your taste")
     st.caption("A few answers are enough to start. Your likes refine the list after that.")
@@ -83,13 +83,12 @@ with st.sidebar:
                 "acidity": pick(acidity), "grapes": grapes, "countries": countries,
                 "discovery": discovery})
             st.session_state.onboarded = True
-            st.rerun()
     if st.session_state.onboarded:
         st.success("Taste profile saved")
     st.markdown(f"<p class='meta'>Feedback given: {st.session_state.feedback} · "
                 f"session {user_id}</p>", unsafe_allow_html=True)
 
-# ------------------------------------------------------------------ header
+# header
 n_wines = health.get("wines") or health.get("n_wines")
 stats = [f"<span class='stat'>Model <b>{html.escape(str(health.get('model_version', '')))}</b></span>",
          "<span class='stat'>Graph model <b>HGIB + KGAT</b></span>"]
@@ -104,10 +103,9 @@ st.markdown(
 if not st.session_state.onboarded:
     st.info("Start with your taste in the left panel. Until then, you see the wines people like most.")
 
-# ------------------------------------------------------------------ 2. recommendations
-c_dish, c_k = st.columns([3, 1])
-dish = c_dish.selectbox("What are you eating tonight?", ["Any dish"] + options["dishes"])
-k = c_k.selectbox("Wines to show", [6, 10, 16], index=1)
+# 2. recommendations
+dish = st.selectbox("What are you eating tonight?", ["Any dish"] + options["dishes"])
+k = 10
 payload = {"user_id": user_id, "dish": None if dish == "Any dish" else dish, "k": k}
 res = requests.post(f"{API}/recommend", json=payload, timeout=30).json()
 st.markdown(f"<p class='meta'>{len(res['wines'])} wines · answered in "
