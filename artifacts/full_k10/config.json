@@ -1,0 +1,14 @@
+{
+  "data_dir": "data/processed/full_k10",
+  "epochs": 14,
+  "batch_size": 32768,
+  "lr": 0.02,
+  "dim": 16,
+  "beta": 0.1,
+  "lambda_kg": 0.1,
+  "patience": 3,
+  "seed": 42,
+  "use_questionnaire": true,
+  "use_hgib": true,
+  "use_gre": true
+}

@@ -4,6 +4,7 @@ Examples
 --------
     python scripts/train.py --data data/processed/slim --out artifacts/slim
     python scripts/train.py --data data/processed/full --out artifacts/full
+    python scripts/train.py --data data/processed/full_k10 --out artifacts/full_k10 --dim 16 --lr 0.02 --batch-size 32768.
 
 Ablations (same data, one component switched off):
     python scripts/train.py --data data/processed/full --out artifacts/full_no_questionnaire --no-questionnaire

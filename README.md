@@ -51,61 +51,91 @@ watch the list change. Everything is logged in `artifacts/sommelier.db`.
 
 Checks: `python -m pytest -q`
 
-## Full pipeline (results of the report)
+## Final model (V2) — run the demo in 2 commands
+
+The final model is committed: `artifacts/full_k10/` (HGIB-KGAT trained on X-Wines Full) and its
+data split `data/processed/full_k10/` (~23 MB). No download and no training are needed.
+
+```bash
+# terminal 1: API on the final model (it is also the default when MODEL_DIR / DATA_DIR are not set)
+MODEL_DIR=artifacts/full_k10 DATA_DIR=data/processed/full_k10 uvicorn api.main:app
+#   Windows PowerShell: $env:MODEL_DIR="artifacts/full_k10"; $env:DATA_DIR="data/processed/full_k10"; uvicorn api.main:app
+
+# terminal 2: app  ->  http://localhost:8501
+streamlit run app/streamlit_app.py
+```
+
+| | V1 (Week 3 report) | **V2 (final model)** |
+|---|---|---|
+| Input | X-Wines Full (21M ratings, 100K wines) | X-Wines Full (21M ratings, 100K wines) |
+| Filter | year 2021, 20-core | year 2021, **10-core** |
+| Ratings used | 443,073 | **1,688,859** |
+| Users / wines | 12,406 / 8,968 | **79,652 / 37,112** |
+| Target interactions (liked, train) | 246,578 | **928,763** |
+| Model | dim 32 / 64 | dim 16 (12 GB RAM of Colab), 14 epochs, best epoch 12 |
+| Folders | `artifacts/full*`, `data/processed/full` | `artifacts/full_k10`, `data/processed/full_k10` |
+
+V2 test results (`artifacts/results_full_k10/results.md`, 45,394 test users, full ranking):
+
+| Method | NDCG@10 | Recall@20 | Body match |
+|---|---|---|---|
+| Most-popular | 0.0088 | 0.0224 | 0.30 |
+| Dish → wines (query) | 0.0146 | 0.0381 | 0.32 |
+| HGIB-KGAT | 0.0161 | 0.0439 | 0.39 |
+| HGIB-KGAT + dish filter | **0.0254** | **0.0669** | 0.40 |
+| HGIB-KGAT + questionnaire bonus + dish filter (served) | 0.0225 | 0.0598 | **0.77** |
+
+Training curves: `artifacts/full_k10/curves.png`; feedback curve:
+`artifacts/results_full_k10/feedback_curve.png`; qualitative check:
+`artifacts/full_k10/sample_users.md`; Colab logs: `reports/v2_logs/`.
+
+## Full pipeline (how the models were produced)
 
 1. Download from the [X-Wines Google Drive](https://drive.google.com/drive/folders/1LqguJNV-aKh1PuWMVx5ELA61LPfGfuu_?usp=sharing)
-   into `data/raw/`: `XWines_Slim_1K_wines.csv`, `XWines_Slim_150K_ratings.csv`,
-   `XWines_Full_100K_wines.csv`, `XWines_Full_21M_ratings.csv` (unzip it).
-2. Prepare the data:
+   into `data/raw/`: `XWines_Full_100K_wines.csv` and `XWines_Full_21M_ratings.csv`
+   (and `XWines_Slim_1K_wines.csv`, `XWines_Slim_150K_ratings.csv` for the Slim version).
+2. Prepare the data (reads the 21M ratings in chunks, ~3 min):
    ```bash
+   python scripts/prepare_data.py --preset full_k10    # V2, final: 2021, 10-core
+   python scripts/prepare_data.py --preset full        # V1: 2021, 20-core
    python scripts/prepare_data.py --preset slim
-   python scripts/prepare_data.py --preset full --min-year 2021 --kcore 20     # V1
    ```
-3. Train (Slim: ~10 min on a laptop; Full: use `--dim 32` on 8 GB of RAM, or Google Colab):
+3. Train. V2 was trained on Google Colab (CPU, 12 GB RAM, ~10 min per epoch); it does not fit
+   in 8 GB of RAM:
    ```bash
-   python scripts/train.py --data data/processed/slim --out artifacts/slim --batch-size 4096
-   python scripts/train.py --data data/processed/full --out artifacts/full --batch-size 8192 --lr 0.01 --patience 5
+   # V2 (final)
+   python scripts/train.py --data data/processed/full_k10 --out artifacts/full_k10 --dim 16 --batch-size 32768 --lr 0.02 --patience 3 --epochs 14 --max-eval-users 2000
+   # V1
+   python scripts/train.py --data data/processed/full --out artifacts/full --dim 32 --batch-size 8192 --lr 0.01 --patience 5
    ```
    Ablations: add `--no-questionnaire`, `--no-hgib` or `--no-gre` (and another `--out`).
-4. Choose the weight of the questionnaire bonus on the **validation** split (served score =
-   standardised model score + weight × number of answers the wine matches; it makes the list
-   respect the colour / body asked for):
+4. Questionnaire bonus weight, chosen on the **validation** split (served score = standardised
+   model score + weight × number of answers the wine matches):
    ```bash
    python scripts/tune_bonus.py --model artifacts/full --data data/processed/full
    ```
-   The chosen weight is the default `DEFAULT_QUESTIONNAIRE_WEIGHT` in
+   The chosen weight (0.5, tuned on V1 and reused for V2) is `DEFAULT_QUESTIONNAIRE_WEIGHT` in
    `src/sommelier/serving/predict.py` (override with `QUESTIONNAIRE_WEIGHT=...`).
-5. Evaluate on the test split (table with colour / body match + feedback curve), then the
-   qualitative check:
+5. Evaluate on the **test** split (table + feedback curve), then the qualitative check:
    ```bash
-   python scripts/evaluate.py --data data/processed/slim --models artifacts/slim artifacts/slim_no_questionnaire artifacts/slim_no_hgib --out artifacts/results_slim
-   python scripts/sample_users.py --model artifacts/slim --data data/processed/slim
+   python scripts/evaluate.py --data data/processed/full_k10 --models artifacts/full_k10 --out artifacts/results_full_k10 --max-curve-users 500
+   python scripts/sample_users.py --model artifacts/full_k10 --data data/processed/full_k10
    ```
-6. Serve a trained model: set `MODEL_DIR` and `DATA_DIR` (default `artifacts/slim`,
-   `data/processed/slim`) and start the API and the app as in the quick start.
 
-## Trained V1 models (in the repository)
+## Where each step lives in the code
 
-The V1 split (`data/processed/full/`, ~6 MB) and the trained V1 models (~2 MB each) are
-committed, so the demo runs without retraining:
-
-| Folder | What it is |
-|---|---|
-| `artifacts/full/` | served model (HGIB-KGAT, questionnaire on), dim 32, laptop run |
-| `artifacts/full_no_questionnaire/` | ablation of `full`: questionnaire edges switched off |
-| `artifacts/full_no_hgib/` | ablation of `full`: HGIB cascade switched off |
-| `artifacts/full_colab/` | Colab run, dim 64: the V1 numbers of the Week 3 report table (`artifacts/results_full_colab/`) |
-| `artifacts/full_d64/` | laptop re-run of the Colab settings (dim 64): best epoch 11, valid NDCG@10 0.019 |
-
-Test results: `artifacts/results_full/` (served model, ablations, colour / body match, feedback curve)
-and `artifacts/results_full_colab/` (Colab model).
-
-Each folder holds `model.pt`, `config.json`, `history.json`, `summary.json` and `curves.png`.
-Serve the main model:
-
-```bash
-MODEL_DIR=artifacts/full DATA_DIR=data/processed/full uvicorn api.main:app
-```
+| Step | Script | Code |
+|---|---|---|
+| Data pipeline (dedup, 2021 filter, k-core, temporal split) | `scripts/prepare_data.py` | `src/sommelier/data/preprocess.py` |
+| Simulated questionnaires (train only) | (called by the pipeline) | `src/sommelier/data/questionnaire.py` |
+| Knowledge graph (wines, attributes, questionnaire edges) | (called by training) | `src/sommelier/graph/build_ckg.py` |
+| Model: HGIB cascade rated → liked, HSIC, GRE | | `src/sommelier/models/hgib.py` |
+| Model: KGAT encoder, TransR | | `src/sommelier/models/kgat.py` |
+| Training, early stopping, curves | `scripts/train.py` | `src/sommelier/training/train.py` |
+| Baselines, questionnaire bonus | | `src/sommelier/models/baselines.py` |
+| Test evaluation, feedback curve | `scripts/evaluate.py` | `src/sommelier/evaluation/` |
+| Serving (new users, feedback, explanations) | `api/main.py` | `src/sommelier/serving/predict.py` |
+| App | `app/streamlit_app.py` | theme in `.streamlit/config.toml` |
 
 ## Data and evaluation protocol
 

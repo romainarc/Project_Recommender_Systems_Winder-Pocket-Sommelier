@@ -24,3 +24,6 @@ artifacts/*
 !artifacts/results_full/
 artifacts/*/train.log
 artifacts/*/*.log
+!data/processed/full_k10/
+!artifacts/full_k10/
+!artifacts/results_full_k10/

@@ -3,7 +3,7 @@
 Steps
 -----
 1. Load wines and ratings (ratings are read in chunks so the 21M-row Full file fits in memory).
-2. Optional date filter (e.g. keep 2019-2021 for Full).
+2. Optional date filter (2021 only for the Full versions V1 and V2).
 3. Deduplicate (user, wine) pairs coming from several vintages: keep the latest rating.
 4. Optional k-core filtering on users and wines.
 5. Two behaviors for HGIB: ``rated`` (every rating, auxiliary) and ``liked`` (rating >= 4, target).
@@ -26,7 +26,7 @@ LIKE_THRESHOLD = 4.0
 
 @dataclass
 class PrepConfig:
-    min_year: int | None = None      # e.g. 2019 for the Full dataset
+    min_year: int | None = None      # 2021 for the Full dataset
     kcore: int = 1                   # 1 = no filtering (Test), 10 for Full
     train_frac: float = 0.8
     valid_frac: float = 0.1

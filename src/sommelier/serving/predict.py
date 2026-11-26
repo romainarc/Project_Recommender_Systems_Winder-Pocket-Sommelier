@@ -243,8 +243,9 @@ class Recommender:
 
 
 def default_recommender():
-    """Recommender built from the MODEL_DIR and DATA_DIR environment variables."""
+    """Recommender built from the MODEL_DIR and DATA_DIR environment variables
+    (default: the final V2 model, artifacts/full_k10, committed in the repository)."""
     root = Path(__file__).resolve().parents[3]
-    model_dir = os.environ.get("MODEL_DIR", str(root / "artifacts" / "slim"))
-    data_dir = os.environ.get("DATA_DIR", str(root / "data" / "processed" / "slim"))
+    model_dir = os.environ.get("MODEL_DIR", str(root / "artifacts" / "full_k10"))
+    data_dir = os.environ.get("DATA_DIR", str(root / "data" / "processed" / "full_k10"))
     return Recommender(model_dir, data_dir)
