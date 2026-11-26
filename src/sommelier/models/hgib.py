@@ -41,11 +41,15 @@ def hsic(x: torch.Tensor, y: torch.Tensor, sigma: float | None = None) -> torch.
 
 
 class GraphRefinement(nn.Module):
-    """Learnable edge keep-probability for user-wine edges (KG edges keep weight 1)."""
+    """Learnable edge keep-probability for user-wine edges (KG edges keep weight 1).
+
+    The score of an edge is a weighted dot product of its two ends (one linear layer):
+    light enough for the hundreds of thousands of edges of the Full graph.
+    """
 
     def __init__(self, dim: int, temperature: float = 0.5):
         super().__init__()
-        self.mlp = nn.Sequential(nn.Linear(dim, dim), nn.ReLU(), nn.Linear(dim, 1))
+        self.mlp = nn.Linear(dim, 1)
         self.temperature = temperature
 
     def forward(self, x, head, tail, is_behavior):
@@ -59,15 +63,40 @@ class GraphRefinement(nn.Module):
 
 
 class HGIBKGAT(nn.Module):
+    """HGIB + KGAT with inductive users.
+
+    Users have NO personal embedding: they all start from the same learned vector, so a user
+    is described only by its neighbours in the graph (questionnaire answers + wines rated or
+    liked). A new user, or a user who just gave a new feedback, gets a profile without
+    retraining: add the edges and run forward again.
+
+    Ablation switches:
+        use_questionnaire=False  -> the questionnaire edges are removed from the graph
+        use_hgib=False           -> plain KGAT on the target behavior only (no rated level,
+                                    no information bottleneck)
+    """
+
     def __init__(self, ckg: CKG, dim: int = 64, layer_dims=(64, 32, 16),
-                 beta: float = 0.1, use_gre: bool = True, behaviors=BEHAVIORS, dropout=0.1):
+                 beta: float = 0.1, use_gre: bool = True, behaviors=BEHAVIORS, dropout=0.1,
+                 use_questionnaire: bool = True, use_hgib: bool = True):
         super().__init__()
         self.ckg = ckg
-        self.behaviors = list(behaviors)
-        self.beta = beta
-        self.use_gre = use_gre
-        self.node_emb = nn.Embedding(ckg.n_nodes, dim)
+        self.use_questionnaire = use_questionnaire
+        self.use_hgib = use_hgib
+        if use_hgib:
+            self.behaviors = list(behaviors)
+            self.beta = beta
+        else:
+            self.behaviors = [behaviors[-1]]   # target behavior only
+            self.beta = 0.0
+        self.use_gre = use_gre and use_hgib
+
+        # one shared starting vector for every user + one vector per wine / taste node
+        self.user_token = nn.Parameter(torch.empty(1, dim))
+        nn.init.xavier_uniform_(self.user_token)
+        self.node_emb = nn.Embedding(ckg.n_nodes - ckg.n_users, dim)
         nn.init.xavier_uniform_(self.node_emb.weight)
+
         n_rel = 2 * ckg.n_relations                      # + inverse relations
         self.encoders = nn.ModuleList(KGATEncoder(n_rel, dim, dim, layer_dims, dropout)
                                       for _ in self.behaviors)
@@ -75,20 +104,35 @@ class HGIBKGAT(nn.Module):
         self.proj = nn.ModuleList(nn.Linear(out_dim, dim) for _ in self.behaviors)
         self.gre = nn.ModuleList(GraphRefinement(dim) for _ in self.behaviors)
         self.out_dim = out_dim
+        self._edges = self.build_edges()
 
-        self._edges = []
-        n_beh_rel = {ckg.relation_names.index(f"user_{b}") for b in self.behaviors}
+    def build_edges(self, behavior_edges=None, answer_triples=None):
+        """Edge lists of every level. Pass other behavior edges / answers to simulate users
+        with a different history (feedback curve, new app user)."""
+        ckg = self.ckg
+        beh_rel = []
         for b in self.behaviors:
-            h, r, t = edges_for_level(ckg, b)
-            base = r % ckg.n_relations
-            is_beh = torch.isin(base, torch.tensor(sorted(n_beh_rel)))
-            self._edges.append((h, r, t, is_beh))
+            beh_rel.append(ckg.relation_names.index(f"user_{b}"))
+        beh_rel = torch.tensor(beh_rel)
 
-    def forward(self):
-        """Returns per-level outputs: list of (Z_l [n_nodes, out_dim], H_l [n_nodes, dim])."""
-        H = self.node_emb.weight
+        edges = []
+        for b in self.behaviors:
+            h, r, t = edges_for_level(ckg, b, self.use_questionnaire, behavior_edges, answer_triples)
+            is_beh = torch.isin(r % ckg.n_relations, beh_rel)
+            edges.append((h, r, t, is_beh))
+        return edges
+
+    def initial_embeddings(self):
+        users = self.user_token.expand(self.ckg.n_users, -1)
+        return torch.cat([users, self.node_emb.weight])
+
+    def forward(self, edges=None):
+        """Returns per-level outputs: list of (Z_l [n_nodes, out_dim], H_l, H_prev)."""
+        if edges is None:
+            edges = self._edges
+        H = self.initial_embeddings()
         levels = []
-        for enc, proj, gre, (h, r, t, is_beh) in zip(self.encoders, self.proj, self.gre, self._edges):
+        for enc, proj, gre, (h, r, t, is_beh) in zip(self.encoders, self.proj, self.gre, edges):
             w = gre(H, h, t, is_beh) if self.use_gre else None
             Z = enc(H, h, r, t, edge_weight=w)
             H_next = proj(Z)
@@ -123,5 +167,5 @@ class HGIBKGAT(nn.Module):
         loss = bpr_total + self.beta * ib_total
         if kg_batch is not None:
             h, r, t, t_neg = kg_batch
-            loss = loss + lambda_kg * self.encoders[0].transr_loss(self.node_emb.weight, h, r, t, t_neg)
+            loss = loss + lambda_kg * self.encoders[0].transr_loss(self.initial_embeddings(), h, r, t, t_neg)
         return loss, {"bpr": float(bpr_total.detach()), "ib_hsic": float(ib_total.detach())}

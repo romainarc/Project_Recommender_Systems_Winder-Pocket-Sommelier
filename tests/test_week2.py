@@ -66,20 +66,79 @@ def test_hgib_forward_and_backward():
     assert torch.isfinite(loss)
 
 
-def test_api_mock_and_logging(tmp_path):
+@pytest.fixture(scope="session")
+def tiny_model(tmp_path_factory):
+    """A model trained for 2 epochs on the Test data (enough to check the plumbing)."""
+    out = tmp_path_factory.mktemp("model")
+    from sommelier.training.train import train
+    train(PROCESSED, out, epochs=2, batch_size=128, dim=16, log=lambda m: None)
+    return out
+
+
+def test_questionnaires_come_from_train_only():
+    import pandas as pd
+    train = pd.read_parquet(PROCESSED / "train.parquet")
+    q = pd.read_parquet(PROCESSED / "questionnaires.parquet")
+    assert set(q["UserID"]) <= set(train["UserID"])
+
+
+def test_guest_slots_do_not_change_real_users(tiny_model):
+    import torch
+    from sommelier.serving.predict import Recommender, embeddings, load_model
+    rec = Recommender(tiny_model, PROCESSED, n_guests=3)
+    model, ds, _ = load_model(tiny_model, None)
+    Z = embeddings(model)
+    n, nw = ds.ckg.n_users, ds.ckg.n_wines
+    before = Z[:5] @ Z[n:n + nw].T
+    after = rec.Z[:5] @ rec.Z[rec.ckg.n_users:rec.ckg.n_users + nw].T
+    assert torch.allclose(before, after, atol=1e-5)
+
+
+def test_api_real_model_and_logging(tmp_path, tiny_model):
     os.environ["DATABASE_URL"] = f"sqlite:///{tmp_path}/t.db"
+    os.environ["MODEL_DIR"] = str(tiny_model)
+    os.environ["DATA_DIR"] = str(PROCESSED)
     sys.path.insert(0, str(ROOT))
-    from fastapi.testclient import TestClient
     import importlib
+    from fastapi.testclient import TestClient
     import api.main as main
     importlib.reload(main)
     c = TestClient(main.app)
+    r = c.post("/onboard", json={"user_id": "u1", "color": "Red", "grapes": ["Malbec"]})
+    assert r.status_code == 200
     r = c.post("/recommend", json={"user_id": "u1", "dish": "Beef", "k": 5})
-    assert r.status_code == 200 and len(r.json()["wines"]) == 5
-    assert all("Beef" in main.WINES.set_index("WineID").loc[w["wine_id"], "Harmonize"]
-               for w in r.json()["wines"])
-    r = c.post("/log_interaction", json={"user_id": "u1", "wine_id": 100062, "event_type": "like"})
+    body = r.json()
+    assert r.status_code == 200 and len(body["wines"]) == 5
+    assert body["model_version"] == Path(tiny_model).name           # trained model, not a mock
+    assert body["latency_ms"] < 2000
+    first = body["wines"][0]["wine_id"]
+    r = c.post("/log_interaction", json={"user_id": "u1", "wine_id": first, "event_type": "like"})
     assert r.json()["status"] == "logged"
-    from sommelier.db.schema import Interaction
+    again = c.post("/recommend", json={"user_id": "u1", "dish": "Beef", "k": 5}).json()
+    assert first not in [w["wine_id"] for w in again["wines"]]       # liked wine not shown again
+    from sommelier.db.schema import Interaction, QuestionnaireAnswer
     with main.Session() as s:
         assert s.query(Interaction).count() == 1
+        assert s.query(QuestionnaireAnswer).count() == 1
+
+
+def test_questionnaire_bonus_ranks_matching_wines_first():
+    from sommelier.models.baselines import questionnaire_adherence, questionnaire_bonus
+    attrs = {"type": np.array(["Red", "White", "Red", "White"], dtype=object),
+             "body": np.array(["Full-bodied", "Light-bodied", "Light-bodied", "Full-bodied"], dtype=object),
+             "acidity": np.array([None] * 4, dtype=object), "grapes": [[]] * 4,
+             "country": np.array(["France"] * 4, dtype=object)}
+    model_scores = np.array([0.1, 0.9, 0.2, 0.8])            # the model prefers the whites
+    answers = {"color": "Red", "body": float("nan"), "grapes": np.array([])}   # parquet-like row
+    assert np.array_equal(questionnaire_bonus(model_scores, answers, attrs, 0), model_scores)
+    top = np.argsort(-questionnaire_bonus(model_scores, answers, attrs, 3.0))[:2]
+    assert set(top) == {0, 2}                                 # the two reds come first
+    assert questionnaire_adherence(top, answers, attrs) == {"color": 1.0}   # body not answered
+
+
+def test_served_list_respects_the_colour(tiny_model):
+    from sommelier.serving.predict import Recommender
+    rec = Recommender(tiny_model, PROCESSED, n_guests=2, questionnaire_weight=5.0)
+    rec.onboard("g", {"color": "Red"})
+    wines = rec.recommend("g", k=5)
+    assert all(w["type"] == "Red" for w in wines)

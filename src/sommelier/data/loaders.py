@@ -22,6 +22,7 @@ class Dataset:
     train_seen: dict                   # user local id -> set of wine local ids (masked at eval)
     valid_truth: dict                  # user local id -> set of wine local ids
     test_truth: dict
+    questionnaires: pd.DataFrame = None
 
 
 def _truth(df: pd.DataFrame, ckg: CKG) -> dict:
@@ -41,9 +42,14 @@ def load_processed(path: str | Path) -> Dataset:
     wines["Grapes"] = wines["Grapes"].map(list)
     wines["Harmonize"] = wines["Harmonize"].map(list)
 
-    ckg = build_ckg(train, wines)
+    # simulated questionnaires (built from train only); older processed folders have none
+    questionnaires = None
+    if (p / "questionnaires.parquet").exists():
+        questionnaires = pd.read_parquet(p / "questionnaires.parquet")
+
+    ckg = build_ckg(train, wines, questionnaires)
     liked = train[train["liked"]]
     tl = torch.tensor(np.stack([liked["UserID"].map(ckg.user_index).to_numpy(),
                                 liked["WineID"].map(ckg.wine_index).to_numpy()]), dtype=torch.long)
     return Dataset(ckg, train, valid, test, wines, tl, _truth(train, ckg),
-                   _truth(valid, ckg), _truth(test, ckg))
+                   _truth(valid, ckg), _truth(test, ckg), questionnaires)

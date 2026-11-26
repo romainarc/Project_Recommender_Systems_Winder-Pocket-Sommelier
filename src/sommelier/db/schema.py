@@ -28,6 +28,14 @@ class Interaction(Base):
     ts = Column(DateTime(timezone=True), default=_now)
 
 
+class QuestionnaireAnswer(Base):
+    __tablename__ = "questionnaire_answers"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(String, index=True, nullable=False)
+    answers = Column(JSON, nullable=False)          # color, body, acidity, grapes, countries, discovery
+    ts = Column(DateTime(timezone=True), default=_now)
+
+
 class Impression(Base):
     __tablename__ = "impressions"
     id = Column(Integer, primary_key=True, autoincrement=True)

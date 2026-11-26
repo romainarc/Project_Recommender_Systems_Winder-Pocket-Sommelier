@@ -1,0 +1,14 @@
+{
+  "data_dir": "data/processed/full",
+  "epochs": 15,
+  "batch_size": 8192,
+  "lr": 0.01,
+  "dim": 32,
+  "beta": 0.1,
+  "lambda_kg": 0.1,
+  "patience": 5,
+  "seed": 42,
+  "use_questionnaire": true,
+  "use_hgib": false,
+  "use_gre": true
+}

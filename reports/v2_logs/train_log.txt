@@ -1,0 +1,16 @@
+graph: 78961 users, 37112 wines, 14879 taste/KG nodes | model: 852,530 parameters | config: {'data_dir': 'data/processed/full_k10', 'epochs': 14, 'batch_size': 32768, 'lr': 0.02, 'dim': 16, 'beta': 0.1, 'lambda_kg': 0.1, 'patience': 3, 'seed': 42, 'use_questionnaire': True, 'use_hgib': True, 'use_gre': True}
+epoch  1 | objective 1.0274 | train loss 0.4328 | valid loss 0.4741 | valid NDCG@10 0.0054 | Recall@20 0.0163 | 614.9s
+epoch  2 | objective 0.8899 | train loss 0.3978 | valid loss 0.4677 | valid NDCG@10 0.0069 | Recall@20 0.0200 | 600.0s
+epoch  3 | objective 0.8228 | train loss 0.3473 | valid loss 0.4366 | valid NDCG@10 0.0072 | Recall@20 0.0204 | 594.5s
+epoch  4 | objective 0.7317 | train loss 0.3019 | valid loss 0.3862 | valid NDCG@10 0.0108 | Recall@20 0.0274 | 585.7s
+epoch  5 | objective 0.6477 | train loss 0.2520 | valid loss 0.3621 | valid NDCG@10 0.0098 | Recall@20 0.0266 | 564.8s
+epoch  6 | objective 0.5848 | train loss 0.2247 | valid loss 0.3364 | valid NDCG@10 0.0124 | Recall@20 0.0328 | 562.1s
+epoch  7 | objective 0.5483 | train loss 0.2247 | valid loss 0.3443 | valid NDCG@10 0.0128 | Recall@20 0.0330 | 579.0s
+epoch  8 | objective 0.5240 | train loss 0.2047 | valid loss 0.3366 | valid NDCG@10 0.0117 | Recall@20 0.0309 | 570.8s
+epoch  9 | objective 0.5029 | train loss 0.1946 | valid loss 0.3427 | valid NDCG@10 0.0113 | Recall@20 0.0331 | 570.6s
+epoch 10 | objective 0.4859 | train loss 0.1830 | valid loss 0.3364 | valid NDCG@10 0.0139 | Recall@20 0.0369 | 559.3s
+epoch 11 | objective 0.4702 | train loss 0.1767 | valid loss 0.3316 | valid NDCG@10 0.0130 | Recall@20 0.0329 | 581.4s
+epoch 12 | objective 0.4583 | train loss 0.1724 | valid loss 0.3341 | valid NDCG@10 0.0142 | Recall@20 0.0375 | 570.2s
+epoch 13 | objective 0.4472 | train loss 0.1667 | valid loss 0.3331 | valid NDCG@10 0.0128 | Recall@20 0.0394 | 567.8s
+epoch 14 | objective 0.4388 | train loss 0.1647 | valid loss 0.3427 | valid NDCG@10 0.0137 | Recall@20 0.0360 | 564.5s
+best epoch 12 (valid NDCG@10 0.0142) -> /content/projet/artifacts/full_k10/model.pt

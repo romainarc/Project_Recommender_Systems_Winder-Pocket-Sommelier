@@ -1,0 +1,24 @@
+{
+  "config": {
+    "min_year": 2021,
+    "kcore": 20,
+    "train_frac": 0.8,
+    "valid_frac": 0.1,
+    "chunksize": 2000000
+  },
+  "ratings_read": 3634178,
+  "after_dedup": 3575161,
+  "after_kcore": 443073,
+  "users": 12406,
+  "wines": 8968,
+  "train_rated": 354458,
+  "train_liked": 246578,
+  "valid_liked_warm": 31035,
+  "test_liked_warm": 31880,
+  "dishes": 50,
+  "questionnaires": 12376,
+  "T1": "2021-10-26 14:37:29.400000",
+  "T2": "2021-11-29 05:54:09.400000",
+  "valid_cold_dropped": 323,
+  "test_cold_dropped": 396
+}
