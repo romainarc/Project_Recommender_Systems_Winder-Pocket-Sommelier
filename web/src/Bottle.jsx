@@ -150,19 +150,22 @@ export default function Bottle({ type = "Red", grapes = [], winery, name, height
 }
 
 // A wine glass with a liquid level and tint (used for the "body" question).
-export function Glass({ level = 0.5, tint = "#5e1426", height = 120 }) {
+export function Glass({ level = 0.5, tint = "#5e1426", height = 120, animate = false, slow = false }) {
   const id = useId().replace(/:/g, "");
   const y = 70 - level * 44;
   return (
-    <svg viewBox="0 0 80 140" height={height} width={(height * 80) / 140} aria-hidden="true">
+    <svg viewBox="0 0 80 140" height={height} width={(height * 80) / 140} aria-hidden="true"
+      className={`glass ${animate ? "pouring" : ""} ${slow ? "slow" : ""}`}>
       <defs>
         <clipPath id={`bowl${id}`}>
           <path d="M14 10h52c2 34-6 58-26 62C20 68 12 44 14 10z" />
         </clipPath>
       </defs>
       <g clipPath={`url(#bowl${id})`}>
-        <rect x="0" y={y} width="80" height="80" fill={tint} />
-        <ellipse cx="40" cy={y} rx="30" ry="2.5" fill="#fff" opacity="0.25" />
+        <g className="glass-liquid">
+          <rect x="0" y={y} width="80" height="80" fill={tint} />
+          <ellipse cx="40" cy={y} rx="30" ry="2.5" fill="#fff" opacity="0.25" />
+        </g>
       </g>
       <path d="M14 10h52c2 34-6 58-26 62C20 68 12 44 14 10z" fill="none" stroke="#1d1d1f" strokeOpacity="0.55" strokeWidth="1.4" />
       <path d="M20 16c-1 18 2 34 9 44" fill="none" stroke="#fff" strokeOpacity="0.7" strokeWidth="2" strokeLinecap="round" />

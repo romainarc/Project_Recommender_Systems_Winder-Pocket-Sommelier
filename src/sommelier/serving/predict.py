@@ -24,6 +24,11 @@ DEFAULT_QUESTIONNAIRE_WEIGHT = 0.5
 # at least this close (cosine similarity).
 LIKE_SIMILARITY = 0.9          # about the top 1 % of random wine pairs (0.83)
 MAX_SIMILAR_REASONS = 3
+# serving-only ranking preferences (see Recommender._app_preferences / _diverse_top)
+COLOR_WEIGHT = 1.0      # on top of the 0.5 questionnaire bonus: the colour counts 1.5
+STYLE_WEIGHT = 0.8      # safe -> popular wines up, explorer -> lesser-known wines up
+MAX_PER_WINERY = 2
+MAX_PER_REGION = 3
 
 # X-Wines has 60 dish labels, many with only a few wines ("Fish": 54, "Paella": 1) next to
 # big ones ("Rich Fish": 5,699). The app offers these families; a family matches a wine
@@ -219,11 +224,12 @@ class Recommender:
                 scores = (self.Z[node] @ wines.T).numpy().astype(float)
             # make the explicit answers count: a "red, full-bodied" user gets reds first
             scores = questionnaire_bonus(scores, answers, self.attrs, self.questionnaire_weight)
+            scores = self._app_preferences(scores, answers)
         if dish:
             scores = scores + self._dish_mask(dish) * 1e6
         for w in seen:
             scores[w] = -np.inf
-        top = np.argsort(-scores)[:k]
+        top = self._diverse_top(scores, k)
         liked = guest.get("liked", [])
         # "close to the wine you liked" on the few closest wines only, so the taste reasons
         # stay visible on the others
@@ -232,6 +238,44 @@ class Recommender:
         keep = {w for _, w in ranked[:MAX_SIMILAR_REASONS]}
         return [self.describe(w, dish, answers, close=c[0] if w in keep else None,
                               personal=has_profile) for c, w in closest]
+
+    def _app_preferences(self, scores, answers):
+        """Serving-only adjustments (the offline evaluation does not use them):
+        the colour asked for weighs more than the other answers (a white lover should not get
+        nine champagnes), and the safe / discovery answer moves popular or lesser-known wines up."""
+        answers = answers or {}
+        color = answers.get("color")
+        if isinstance(color, str):
+            scores = scores + COLOR_WEIGHT * (self.attrs["type"] == color)
+        style = answers.get("discovery")
+        if style in ("safe", "explorer"):
+            if not hasattr(self, "_pop_pct"):
+                order = np.argsort(-self.popularity)
+                self._pop_pct = np.empty(len(order))
+                self._pop_pct[order] = np.arange(len(order)) / max(1, len(order) - 1)  # 0 = most popular
+            shift = self._pop_pct if style == "explorer" else 1 - self._pop_pct
+            scores = scores + STYLE_WEIGHT * shift
+        return scores
+
+    def _diverse_top(self, scores, k):
+        """Top-k with variety: at most MAX_PER_WINERY wines of one winery and MAX_PER_REGION
+        of one region, taken in score order (falls back to plain order if too few)."""
+        order = np.argsort(-scores)[: k * 12]
+        wineries, regions, picked = {}, {}, []
+        for w in order:
+            if not np.isfinite(scores[w]):
+                break
+            row = self.wines.loc[self.local_to_wine_id[int(w)]]
+            wy, rg = row.get("WineryName"), row.get("RegionName")
+            if wineries.get(wy, 0) >= MAX_PER_WINERY or regions.get(rg, 0) >= MAX_PER_REGION:
+                continue
+            picked.append(int(w))
+            wineries[wy] = wineries.get(wy, 0) + 1
+            regions[rg] = regions.get(rg, 0) + 1
+            if len(picked) == k:
+                return np.array(picked)
+        rest = [int(w) for w in order if int(w) not in picked and np.isfinite(scores[w])]
+        return np.array((picked + rest)[:k])
 
     def _closest_liked(self, w, liked):
         """(liked wine closest to wine w, cosine) when close enough, else (None, 0)."""
@@ -312,6 +356,7 @@ class Recommender:
                 "winery": row.get("WineryName"),
                 "abv": float(abv) if abv is not None and abv == abv else None,
                 "country_code": row.get("Code"),
+                "dishes": list(row["Harmonize"]),
                 "popularity_rank": rank, "explanation": why,
                 "similar_to_liked": close is not None,
                 "basis": basis, "matched": matched, "pairs_with": pairs,

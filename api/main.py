@@ -60,6 +60,7 @@ class WineOut(BaseModel):
     winery: Optional[str] = None
     abv: Optional[float] = None
     country_code: Optional[str] = None
+    dishes: List[str] = []                   # every X-Wines pairing of the wine
     popularity_rank: int
     explanation: str
     similar_to_liked: bool = False
@@ -150,4 +151,15 @@ def log_interaction(evt: InteractionIn):
 WEB_DIST = ROOT / "web" / "dist"
 if WEB_DIST.exists():
     from fastapi.staticfiles import StaticFiles  # noqa: E402
-    app.mount("/", StaticFiles(directory=WEB_DIST, html=True), name="web")
+
+    class WebApp(StaticFiles):
+        """The page itself is always re-checked (so an update is seen at once); the hashed
+        assets it points to can be cached."""
+
+        async def get_response(self, path, scope):
+            response = await super().get_response(path, scope)
+            if path in ("", ".", "index.html") or path.endswith(".html"):
+                response.headers["Cache-Control"] = "no-cache"
+            return response
+
+    app.mount("/", WebApp(directory=WEB_DIST, html=True), name="web")

@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft, ArrowRight, Beef, Bookmark, BookmarkCheck, CakeSlice, Check, ChevronRight, Croissant,
-  Drumstick, Fish, Flame, Ham, Heart, Loader2, Milk, Pizza, Salad, Search, Shell, UtensilsCrossed, X,
+  Drumstick, Fish, Flame, Ham, Heart, Milk, Pizza, Plus, Salad, Search, Shell, UtensilsCrossed, X,
 } from "lucide-react";
 import Bottle, { Glass, Wave } from "./Bottle.jsx";
 import { api, newUserId } from "./api.js";
@@ -15,6 +15,46 @@ const DISH_ICONS = {
 const BODY_ORDER = ["Very light-bodied", "Light-bodied", "Medium-bodied", "Full-bodied", "Very full-bodied"];
 const ACIDITY_ORDER = ["Low", "Medium", "High"];
 const TYPE_ORDER = ["Red", "White", "Rosé", "Sparkling", "Dessert", "Dessert/Port"];
+const TYPE_DOT = { Red: "#6e1a2c", White: "#d9c77e", "Rosé": "#e8a09a", Sparkling: "#cdb36a", Dessert: "#c58b2c", "Dessert/Port": "#3a0e14" };
+// soft stage colour per wine type: the selection reads at a glance, the page stays light
+const TYPE_TINT = { Red: "#f4e6e8", White: "#f5f1df", "Rosé": "#f9e9e6", Sparkling: "#f3eddc", Dessert: "#f6ead8", "Dessert/Port": "#efe3e5" };
+const tint = (type) => ({ "--tint": TYPE_TINT[type] || "#f3f1ee" });
+
+// how many of the visitor's answers this wine matches (honest count, no made-up score)
+function criteria(answers, w) {
+  if (!answers) return null;
+  const asked = ["color", "body", "acidity"].filter((k) => answers[k]).length
+    + (answers.grapes?.length ? 1 : 0) + (answers.countries?.length ? 1 : 0);
+  if (!asked) return null;
+  const m = w.matched || {};
+  const got = ["color", "body", "acidity", "grapes", "country"].filter((k) => m[k] && (!Array.isArray(m[k]) || m[k].length)).length;
+  return { got, asked };
+}
+
+// region name in big letters behind the bottle, sized so the whole word fits the stage
+function Watermark({ text, width }) {
+  const word = (text || "").toUpperCase();
+  if (!word) return null;
+  const size = Math.max(26, Math.min(92, (width * 0.8) / (word.length * 0.64)));
+  return <span className="watermark" style={{ fontSize: `${size}px` }} aria-hidden="true">{word}</span>;
+}
+
+function Criteria({ t, answers, wine }) {
+  const c = criteria(answers, wine);
+  if (!c) return null;
+  const r = 9, len = 2 * Math.PI * r, part = c.got / c.asked;
+  return (
+    <span className={`criteria ${part >= 0.8 ? "high" : ""}`}>
+      <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+        <circle cx="12" cy="12" r={r} fill="none" stroke="currentColor" strokeOpacity="0.18" strokeWidth="3" />
+        <circle cx="12" cy="12" r={r} fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"
+          strokeDasharray={`${len * part} ${len}`} transform="rotate(-90 12 12)" className="criteria-arc" />
+      </svg>
+      {t.criteria(c.got, c.asked)}
+    </span>
+  );
+}
+
 const STEPS = ["color", "body", "acidity", "grapes", "countries", "discovery"];
 const EMPTY_ANSWERS = { color: null, body: null, acidity: null, grapes: [], countries: [], discovery: null };
 const FEATURED_GRAPES = [
@@ -22,22 +62,43 @@ const FEATURED_GRAPES = [
   "Grenache", "Chardonnay", "Sauvignon Blanc", "Riesling", "Pinot Grigio", "Chenin Blanc", "Viognier",
   "Gamay", "Nebbiolo", "Zinfandel", "Carmenère",
 ];
+const SESSION_KEY = "ps-session-v1";
 
-function readLang() {
+function load(key, fallback) {
   try {
-    return localStorage.getItem("ps-lang") || "fr";
+    const v = localStorage.getItem(key);
+    return v ? JSON.parse(v) : fallback;
   } catch {
-    return "fr";
+    return fallback;
+  }
+}
+function save(key, value) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    /* private mode: the visit is kept until the page is closed */
   }
 }
 
-export function Logo({ size = 30 }) {
+/* ------------------------------------------------------------------ brand */
+// The mark: a fine-line wine glass that fills with wine when the page opens.
+export function LogoMark({ size = 30, animate = true }) {
+  const uid = useId().replace(/:/g, "");
   return (
-    <svg viewBox="0 0 40 40" width={size} height={size} aria-hidden="true" className="logo-mark">
-      <rect width="40" height="40" rx="11" fill="#7a1f33" />
-      <path d="M13.5 9.5h13l-.9 8.4a5.65 5.65 0 0 1-11.2 0z" fill="#fff" />
-      <path d="M14.6 14.2h10.8l-.4 3.6a5.05 5.05 0 0 1-10 0z" fill="#c9566d" />
-      <path d="M20 23.6v6.6M15.6 30.6h8.8" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" />
+    <svg viewBox="0 0 32 32" width={size} height={size} aria-hidden="true" className={`logo-mark ${animate ? "fill-anim" : ""}`}>
+      <defs>
+        <clipPath id={`bowl${uid}`}>
+          <path d="M9.6 4.5h12.8c.6 5.6.2 10.9-6.4 11.9C9.4 15.4 9 10.1 9.6 4.5z" />
+        </clipPath>
+      </defs>
+      <rect width="32" height="32" rx="9" fill="var(--logo-bg, #7a1f33)" />
+      <g clipPath={`url(#bowl${uid})`}>
+        <g className="logo-liquid">
+          <path d="M2 10.5c3-1.4 5 1.4 8 0s5-1.4 8 0 5 1.4 8 0 5-1.4 8 0V20H2z" fill="#e7b9c2" />
+        </g>
+      </g>
+      <path d="M9.6 4.5h12.8c.6 5.6.2 10.9-6.4 11.9C9.4 15.4 9 10.1 9.6 4.5z" fill="none" stroke="#fff" strokeWidth="1.4" strokeLinejoin="round" />
+      <path d="M16 16.4v7.6M11.6 26.2h8.8" stroke="#fff" strokeWidth="1.4" strokeLinecap="round" />
     </svg>
   );
 }
@@ -45,49 +106,67 @@ export function Logo({ size = 30 }) {
 function Wordmark() {
   return (
     <span className="wordmark">
-      <span className="wm-strong">Pocket</span>
-      <span className="wm-light">Sommelier</span>
+      Pocket<span className="wm-thin">Sommelier</span>
     </span>
   );
 }
 
+function CountUp({ value }) {
+  const [shown, setShown] = useState(value);
+  const prev = useRef(value);
+  useEffect(() => {
+    const from = prev.current;
+    prev.current = value;
+    if (from === value) return;
+    let k = 0;
+    const id = setInterval(() => {
+      k += 1;
+      setShown(Math.round(from + ((value - from) * k) / 12));
+      if (k >= 12) clearInterval(id);
+    }, 28);
+    return () => clearInterval(id);
+  }, [value]);
+  return <span className="countup">{shown}</span>;
+}
+
+/* ------------------------------------------------------------------ app */
 export default function App() {
-  const [lang, setLang] = useState(readLang);
+  const saved = useMemo(() => load(SESSION_KEY, null), []);
+  const [lang, setLang] = useState(() => load("ps-lang", "fr"));
   const t = useMemo(() => makeT(lang), [lang]);
-  const [screen, setScreen] = useState("welcome");
+  const [screen, setScreen] = useState(saved?.profiled ? "results" : "welcome");
   const [options, setOptions] = useState(null);
   const [error, setError] = useState(null);
-  const [userId, setUserId] = useState(newUserId);
-  const [answers, setAnswers] = useState(EMPTY_ANSWERS);
-  const [profiled, setProfiled] = useState(false);
-  const [dish, setDish] = useState(null);
+  const [userId, setUserId] = useState(() => saved?.userId || newUserId());
+  const [answers, setAnswers] = useState(() => saved?.answers || EMPTY_ANSWERS);
+  const [profiled, setProfiled] = useState(() => saved?.profiled || false);
+  const [dish, setDish] = useState(() => saved?.dish || null);
   const [wines, setWines] = useState([]);
   const [latency, setLatency] = useState(null);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(null);
-  const [cellar, setCellar] = useState([]);
-  const [liked, setLiked] = useState([]);
+  const [justLiked, setJustLiked] = useState(null);
+  const [cellar, setCellar] = useState(() => saved?.cellar || []);
+  const [liked, setLiked] = useState(() => saved?.liked || []);
+  const [opinions, setOpinions] = useState(() => saved?.opinions || 0);
+  const [detail, setDetail] = useState(null);
+  const [composing, setComposing] = useState(false);
+  const [cellarTab, setCellarTab] = useState("cellar");
+  const [bump, setBump] = useState(0);
   const [toast, setToast] = useState(null);
   const toastTimer = useRef(null);
 
+  // the visit survives a page reload; a restarted API gets the profile back in boot()
+  useEffect(() => {
+    save(SESSION_KEY, { userId, answers, profiled, dish, cellar, liked, opinions });
+  }, [userId, answers, profiled, dish, cellar, liked, opinions]);
   useEffect(() => {
     document.documentElement.lang = lang;
-    try {
-      localStorage.setItem("ps-lang", lang);
-    } catch {
-      /* private mode: the choice lasts for this visit */
-    }
+    save("ps-lang", lang);
   }, [lang]);
-
   useEffect(() => {
     window.scrollTo({ top: 0 });
   }, [screen]);
-
-  const loadOptions = useCallback(() => {
-    setError(null);
-    api.options().then(setOptions).catch(() => setError("api"));
-  }, []);
-  useEffect(loadOptions, [loadOptions]);
 
   const refresh = useCallback(
     async (nextDish = dish, uid = userId) => {
@@ -106,18 +185,43 @@ export default function App() {
     [dish, userId],
   );
 
-  const showToast = (text) => {
-    setToast(text);
+  const boot = useCallback(async () => {
+    setError(null);
+    try {
+      setOptions(await api.options());
+      if (saved?.profiled) {
+        const hasAnswers = Object.values(saved.answers || {}).some((v) => (Array.isArray(v) ? v.length : v));
+        if (hasAnswers) await api.onboard({ user_id: saved.userId, ...saved.answers });
+        refresh(saved.dish || null, saved.userId);
+      }
+    } catch {
+      setError("api");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => {
+    boot();
+  }, [boot]);
+
+  const showToast = (text, kind = "ok") => {
+    setToast({ text, kind });
     clearTimeout(toastTimer.current);
-    toastTimer.current = setTimeout(() => setToast(null), 3600);
+    toastTimer.current = setTimeout(() => setToast(null), 3200);
   };
 
   const finishQuiz = async (final) => {
+    setComposing(true);
     setAnswers(final);
-    await api.onboard({ user_id: userId, ...final });
-    setProfiled(true);
-    setScreen("results");
-    await refresh(dish);
+    try {
+      await Promise.all([api.onboard({ user_id: userId, ...final }), new Promise((r) => setTimeout(r, 1500))]);
+      setProfiled(true);
+      await refresh(dish);
+      setScreen("results");
+    } catch {
+      setError("api");
+    } finally {
+      setComposing(false);
+    }
   };
 
   const showPopular = () => {
@@ -130,26 +234,44 @@ export default function App() {
     refresh(d);
   };
 
-  const feedback = async (wine, event) => {
+  // like / not for me: instant feedback, then the model learns and the list is recomputed
+  const opinion = async (wine, event) => {
     setBusy(wine.wine_id);
+    if (event === "like") {
+      setJustLiked(wine.wine_id);
+      setLiked((l) => (l.some((w) => w.wine_id === wine.wine_id) ? l : [wine, ...l]));
+      showToast(t.likedToast(wine.name), "like");
+    } else {
+      showToast(t.dislikedToast, "info");
+    }
     try {
-      await api.log({ user_id: userId, wine_id: wine.wine_id, event_type: event, dish });
-      if (event === "add_to_cellar") {
-        setCellar((c) => (c.some((w) => w.wine_id === wine.wine_id) ? c : [...c, wine]));
-        showToast(t.savedToast(wine.name));
-      } else if (event === "like") {
-        setLiked((l) => (l.some((w) => w.wine_id === wine.wine_id) ? l : [wine, ...l]));
-        showToast(t.likedToast(wine.name));
-      } else {
-        showToast(t.dislikedToast);
-      }
+      await Promise.all([
+        api.log({ user_id: userId, wine_id: wine.wine_id, event_type: event, dish }),
+        new Promise((r) => setTimeout(r, event === "like" ? 800 : 250)),
+      ]);
+      setOpinions((n) => n + 1);
       setProfiled(true);
+      setDetail(null);
       await refresh(dish);
     } catch {
       setError("api");
     } finally {
       setBusy(null);
+      setJustLiked(null);
     }
+  };
+
+  // cellar: the wine stays in place; a second click takes it out
+  const toggleCellar = (wine) => {
+    if (cellar.some((w) => w.wine_id === wine.wine_id)) {
+      setCellar((c) => c.filter((w) => w.wine_id !== wine.wine_id));
+      showToast(t.removedFromCellar(wine.name), "info");
+      return;
+    }
+    setCellar((c) => [...c, wine]);
+    setBump((b) => b + 1);
+    showToast(t.savedToast(wine.name), "cellar");
+    api.log({ user_id: userId, wine_id: wine.wine_id, event_type: "add_to_cellar", dish }).catch(() => {});
   };
 
   const newVisitor = () => {
@@ -160,23 +282,27 @@ export default function App() {
     setWines([]);
     setCellar([]);
     setLiked([]);
+    setOpinions(0);
+    setDetail(null);
     setScreen("welcome");
   };
 
   if (error && !options) {
     return (
       <div className="center-page">
-        <Logo size={48} />
+        <LogoMark size={56} />
         <p className="error-text">{t.errorApi}</p>
-        <button className="btn btn-primary" onClick={loadOptions}>{t.retry}</button>
+        <button className="btn btn-primary" onClick={boot}>{t.retry}</button>
       </div>
     );
   }
 
-  const go = (s) => {
-    if (s === "results" && wines.length === 0) refresh(dish);
+  const go = (s, tab) => {
+    if ((s === "results" || s === "cellar") && wines.length === 0) refresh(dish);
+    if (tab) setCellarTab(tab);
     setScreen(s);
   };
+  const inCellar = (w) => cellar.some((c) => c.wine_id === w.wine_id);
 
   return (
     <div className={`app screen-${screen}`}>
@@ -185,21 +311,16 @@ export default function App() {
         t={t}
         screen={screen}
         cellarCount={cellar.length}
+        bump={bump}
         onGo={go}
         onHome={() => setScreen("welcome")}
         onLang={() => setLang((l) => (l === "fr" ? "en" : "fr"))}
         onNewVisitor={newVisitor}
       />
-      <main id="main">
+      <main id="main" key={screen} className="page">
         {screen === "welcome" && <Welcome t={t} onStart={() => setScreen("quiz")} onPopular={showPopular} />}
         {screen === "quiz" && options && (
-          <Quiz
-            t={t}
-            options={options}
-            initial={answers}
-            onCancel={() => setScreen(profiled ? "results" : "welcome")}
-            onFinish={finishQuiz}
-          />
+          <Quiz t={t} options={options} initial={answers} onCancel={() => setScreen(profiled ? "results" : "welcome")} onFinish={finishQuiz} />
         )}
         {screen === "results" && options && (
           <Results
@@ -207,13 +328,17 @@ export default function App() {
             options={options}
             answers={answers}
             profiled={profiled}
+            opinions={opinions}
             dish={dish}
             onDish={chooseDish}
             wines={wines}
             loading={loading}
             busy={busy}
-            cellar={cellar}
-            onFeedback={feedback}
+            justLiked={justLiked}
+            inCellar={inCellar}
+            onOpinion={opinion}
+            onCellar={toggleCellar}
+            onOpen={setDetail}
             onQuiz={() => setScreen("quiz")}
             error={error}
             onRetry={() => refresh(dish)}
@@ -222,22 +347,43 @@ export default function App() {
         {screen === "cellar" && (
           <CellarPage
             t={t}
+            tab={cellarTab}
+            onTab={setCellarTab}
             cellar={cellar}
             liked={liked}
+            suggestions={wines}
             answers={answers}
-            profiled={profiled}
-            onRemove={(id) => setCellar((c) => c.filter((w) => w.wine_id !== id))}
+            busy={busy}
+            inCellar={inCellar}
+            onCellar={toggleCellar}
+            onOpinion={opinion}
+            onOpen={setDetail}
             onBack={() => go("results")}
             onQuiz={() => setScreen("quiz")}
           />
         )}
       </main>
       {(screen === "results" || screen === "cellar") && <Footer t={t} latency={latency} />}
+      {detail && (
+        <Detail
+          t={t}
+          answers={Object.values(answers).some((v) => (Array.isArray(v) ? v.length : v)) ? answers : null}
+          wine={detail}
+          saved={inCellar(detail)}
+          busy={busy === detail.wine_id}
+          onClose={() => setDetail(null)}
+          onOpinion={opinion}
+          onCellar={toggleCellar}
+        />
+      )}
+      {composing && <Composing t={t} />}
       <div className={`toast ${toast ? "show" : ""}`} role="status" aria-live="polite">
         {toast && (
           <>
-            <span className="toast-dot" aria-hidden="true"><Check size={14} /></span>
-            <span>{toast}</span>
+            <span className={`toast-icon ${toast.kind}`} aria-hidden="true">
+              {toast.kind === "like" ? <Heart size={14} fill="currentColor" /> : toast.kind === "cellar" ? <BookmarkCheck size={14} /> : <Check size={14} />}
+            </span>
+            <span>{toast.text}</span>
           </>
         )}
       </div>
@@ -245,22 +391,22 @@ export default function App() {
   );
 }
 
-/* ------------------------------------------------------------------ navigation */
-function Nav({ t, screen, cellarCount, onGo, onHome, onLang, onNewVisitor }) {
+/* ------------------------------------------------------------------ navigation, footer */
+function Nav({ t, screen, cellarCount, bump, onGo, onHome, onLang, onNewVisitor }) {
   return (
     <header className="nav">
       <div className="nav-inner">
         <button className="brand" onClick={onHome} aria-label={t.brand}>
-          <Logo size={28} />
+          <LogoMark size={28} />
           <Wordmark />
         </button>
         <nav className="nav-links" aria-label="Pocket Sommelier">
           <button className={`nav-link ${screen === "results" ? "active" : ""}`} onClick={() => onGo("results")}>
             {t.navSelection}
           </button>
-          <button className={`nav-link ${screen === "cellar" ? "active" : ""}`} onClick={() => onGo("cellar")}>
+          <button className={`nav-link ${screen === "cellar" ? "active" : ""}`} onClick={() => onGo("cellar", "cellar")}>
             {t.navCellar}
-            {cellarCount > 0 && <span className="nav-count">{cellarCount}</span>}
+            {cellarCount > 0 && <span key={bump} className="nav-count bump">{cellarCount}</span>}
           </button>
         </nav>
         <div className="nav-right">
@@ -280,7 +426,7 @@ function Footer({ t, latency }) {
     <footer className="footer">
       <div className="footer-inner">
         <div className="footer-brand">
-          <Logo size={22} />
+          <LogoMark size={26} animate={false} />
           <Wordmark />
         </div>
         <p>{t.footer(Math.max(1, Math.round(latency || 1)))}</p>
@@ -300,15 +446,21 @@ const HERO_BOTTLES = [
 ];
 
 function Welcome({ t, onStart, onPopular }) {
+  const words = t.heroTitle.split(" ");
   return (
     <section className="welcome">
       <div className="welcome-copy">
-        <p className="eyebrow">{t.heroTitle2}</p>
-        <h1>{t.heroTitle}</h1>
-        <p className="welcome-sub">{t.heroSub}</p>
-        <div className="welcome-cta">
+        <p className="eyebrow reveal" style={{ "--d": "0ms" }}>{t.heroTitle2}</p>
+        <h1 aria-label={t.heroTitle}>
+          {words.map((w, i) => (
+            <span key={i} className="word" style={{ "--d": `${120 + i * 70}ms` }} aria-hidden="true">{w} </span>
+          ))}
+        </h1>
+        <p className="welcome-sub reveal" style={{ "--d": "520ms" }}>{t.heroSub}</p>
+        <div className="welcome-cta reveal" style={{ "--d": "640ms" }}>
           <button className="btn btn-primary btn-lg" onClick={onStart} autoFocus>
             {t.start}
+            <ArrowRight size={19} aria-hidden="true" />
           </button>
           <button className="btn-chevron" onClick={onPopular}>
             {t.skipToPopular}
@@ -317,13 +469,14 @@ function Welcome({ t, onStart, onPopular }) {
         </div>
       </div>
       <div className="lineup" aria-hidden="true">
+        <span className="spotlight" />
         {HERO_BOTTLES.map((b, i) => (
-          <div key={i} className="lineup-item" style={{ animationDelay: `${i * 70}ms`, "--s": b.h / 330 }}>
+          <div key={i} className="lineup-item" style={{ "--d": `${300 + Math.abs(2 - i) * 110}ms`, "--s": b.h / 330 }}>
             <Bottle {...b} height={b.h} />
           </div>
         ))}
       </div>
-      <ol className="welcome-steps">
+      <ol className="welcome-steps reveal" style={{ "--d": "900ms" }}>
         {t.stepsShort.map((s, i) => (
           <li key={s}>
             <span className="ws-num">{i + 1}</span>
@@ -339,20 +492,19 @@ function Welcome({ t, onStart, onPopular }) {
 function Quiz({ t, options, initial, onCancel, onFinish }) {
   const [i, setI] = useState(0);
   const [a, setA] = useState(initial);
-  const [sending, setSending] = useState(false);
+  const [dir, setDir] = useState(1);
   const key = STEPS[i];
   const [title, help] = t.questions[key];
   const last = i === STEPS.length - 1;
   const timer = useRef(null);
 
-  const go = async (next) => {
+  useEffect(() => () => clearTimeout(timer.current), []);
+
+  const go = (next) => {
     clearTimeout(timer.current);
     if (next < 0) return onCancel();
-    if (next >= STEPS.length) {
-      setSending(true);
-      await onFinish(a);
-      return;
-    }
+    if (next >= STEPS.length) return onFinish(a);
+    setDir(next > i ? 1 : -1);
     setI(next);
   };
 
@@ -360,7 +512,7 @@ function Quiz({ t, options, initial, onCancel, onFinish }) {
     const v = a[field] === value ? null : value;
     setA({ ...a, [field]: v });
     clearTimeout(timer.current);
-    if (v !== null && !last) timer.current = setTimeout(() => setI((x) => x + 1), 380);
+    if (v !== null && !last) timer.current = setTimeout(() => { setDir(1); setI((x) => x + 1); }, 420);
   };
 
   const toggleMany = (field, value, max) => {
@@ -377,21 +529,19 @@ function Quiz({ t, options, initial, onCancel, onFinish }) {
   return (
     <section className="quiz" aria-labelledby="quiz-title">
       <div className="quiz-head">
-        <div className="steps-bar" aria-hidden="true">
-          {STEPS.map((s, k) => (
-            <span key={s} className={k < i ? "done" : k === i ? "now" : ""} />
-          ))}
+        <div className="pour" aria-hidden="true">
+          <span className="pour-fill" style={{ "--p": (i + 1) / STEPS.length }} />
         </div>
         <p className="step-label">{t.step(i + 1, STEPS.length)}</p>
-        <h1 id="quiz-title">{title}</h1>
-        <p className="quiz-help">{help}</p>
+        <h1 id="quiz-title" key={`t-${key}`} className="swap">{title}</h1>
+        <p className="quiz-help" key={`h-${key}`}>{help}</p>
       </div>
 
-      <div className="quiz-stage" key={key}>
+      <div className={`quiz-stage dir-${dir > 0 ? "next" : "prev"}`} key={key}>
         {key === "color" && (
           <div className="opts opts-6">
-            {types.map((x) => (
-              <Option key={x} selected={a.color === x} onClick={() => pickOne("color", x)} title={t.type(x)} hint={t.typeHint(x)}>
+            {types.map((x, k) => (
+              <Option key={x} k={k} style={tint(x)} selected={a.color === x} onClick={() => pickOne("color", x)} title={t.type(x)} hint={t.typeHint(x)}>
                 <Bottle type={x} height={118} reflection={false} label={false} />
               </Option>
             ))}
@@ -400,8 +550,8 @@ function Quiz({ t, options, initial, onCancel, onFinish }) {
         {key === "body" && (
           <div className="opts opts-5">
             {bodies.map((x, k) => (
-              <Option key={x} selected={a.body === x} onClick={() => pickOne("body", x)} title={t.body(x)} hint={t.bodyHint(x)}>
-                <Glass level={0.22 + k * 0.18} tint={["#c9898f", "#a34a5a", "#7a1f33", "#5a1022", "#3a0712"][k]} height={110} />
+              <Option key={x} k={k} selected={a.body === x} onClick={() => pickOne("body", x)} title={t.body(x)} hint={t.bodyHint(x)}>
+                <Glass level={0.22 + k * 0.18} tint={["#c9898f", "#a34a5a", "#7a1f33", "#5a1022", "#3a0712"][k]} height={110} animate />
               </Option>
             ))}
           </div>
@@ -409,22 +559,14 @@ function Quiz({ t, options, initial, onCancel, onFinish }) {
         {key === "acidity" && (
           <div className="opts opts-3">
             {acids.map((x, k) => (
-              <Option key={x} selected={a.acidity === x} onClick={() => pickOne("acidity", x)} title={t.acidity(x)} hint={t.acidityHint(x)}>
+              <Option key={x} k={k} selected={a.acidity === x} onClick={() => pickOne("acidity", x)} title={t.acidity(x)} hint={t.acidityHint(x)}>
                 <span className="wave"><Wave level={k + 1} height={54} /></span>
               </Option>
             ))}
           </div>
         )}
         {key === "grapes" && (
-          <ChipPicker
-            t={t}
-            all={options.grapes}
-            featured={grapesFeatured}
-            selected={a.grapes}
-            max={3}
-            label={(x) => x}
-            onToggle={(x) => toggleMany("grapes", x, 3)}
-          />
+          <ChipPicker t={t} all={options.grapes} featured={grapesFeatured} selected={a.grapes} max={3} label={(x) => x} onToggle={(x) => toggleMany("grapes", x, 3)} />
         )}
         {key === "countries" && (
           <ChipPicker
@@ -468,26 +610,15 @@ function Quiz({ t, options, initial, onCancel, onFinish }) {
 
       <div className="quiz-bar">
         <div className="quiz-bar-inner">
-          <button className="btn btn-quiet" onClick={() => go(i - 1)} disabled={sending}>
+          <button className="btn btn-quiet" onClick={() => go(i - 1)}>
             <ArrowLeft size={18} aria-hidden="true" />
             {t.back}
           </button>
           <div className="quiz-bar-right">
-            {!last && (
-              <button className="btn btn-quiet" onClick={() => go(i + 1)}>{t.skip}</button>
-            )}
-            <button className="btn btn-primary" onClick={() => go(i + 1)} disabled={sending}>
-              {sending ? (
-                <>
-                  <Loader2 className="spin" size={18} aria-hidden="true" />
-                  {t.preparing}
-                </>
-              ) : (
-                <>
-                  {last ? t.finish : t.next}
-                  <ArrowRight size={18} aria-hidden="true" />
-                </>
-              )}
+            {!last && <button className="btn btn-quiet" onClick={() => go(i + 1)}>{t.skip}</button>}
+            <button className="btn btn-primary" onClick={() => go(i + 1)}>
+              {last ? t.finish : t.next}
+              <ArrowRight size={18} aria-hidden="true" />
             </button>
           </div>
         </div>
@@ -496,9 +627,22 @@ function Quiz({ t, options, initial, onCancel, onFinish }) {
   );
 }
 
-function Option({ selected, onClick, title, hint, children }) {
+function Composing({ t }) {
   return (
-    <button className={`opt ${selected ? "selected" : ""}`} aria-pressed={selected} onClick={onClick}>
+    <div className="composing" role="status" aria-live="polite">
+      <div className="composing-glass" aria-hidden="true">
+        <Glass level={0.78} tint="#7a1f33" height={180} animate slow />
+      </div>
+      <p className="composing-title">{t.composing}</p>
+      <p className="composing-sub">{t.composingSub}</p>
+      <span className="composing-line" aria-hidden="true" />
+    </div>
+  );
+}
+
+function Option({ k = 0, style, selected, onClick, title, hint, children }) {
+  return (
+    <button className={`opt ${style ? "tinted" : ""} ${selected ? "selected" : ""}`} style={{ "--d": `${k * 45}ms`, ...style }} aria-pressed={selected} onClick={onClick}>
       <span className="opt-art">{children}</span>
       <span className="opt-title">{title}</span>
       <span className="opt-hint">{hint}</span>
@@ -542,10 +686,10 @@ function ChipPicker({ t, all, featured, selected, max, label, onToggle }) {
         <span className="picker-count">{t.upTo(max)} · {selected.length}/{max}</span>
       </div>
       <div className="chips">
-        {list.map((x) => {
+        {list.map((x, k) => {
           const on = selected.includes(x);
           return (
-            <button key={x} className={`chip ${on ? "on" : ""}`} aria-pressed={on} disabled={!on && selected.length >= max} onClick={() => onToggle(x)}>
+            <button key={x} className={`chip ${on ? "on" : ""}`} style={{ "--d": `${k * 18}ms` }} aria-pressed={on} disabled={!on && selected.length >= max} onClick={() => onToggle(x)}>
               {on && <Check size={15} strokeWidth={2.6} aria-hidden="true" />}
               {label(x)}
             </button>
@@ -556,6 +700,7 @@ function ChipPicker({ t, all, featured, selected, max, label, onToggle }) {
   );
 }
 
+/* ------------------------------------------------------------------ shared bits */
 function Meter({ value, max, label }) {
   return (
     <span className="meter" role="img" aria-label={label}>
@@ -566,62 +711,166 @@ function Meter({ value, max, label }) {
   );
 }
 
-/* ------------------------------------------------------------------ results */
-function tasteSummary(t, answers) {
+// a labelled scale with a marker: "Léger ——●—— Corsé"
+function Scale({ value, max, left, right, label }) {
+  const pct = value > 0 ? ((value - 1) / (max - 1)) * 100 : null;
+  return (
+    <div className="scale" role="img" aria-label={label}>
+      <span className="scale-end">{left}</span>
+      <span className="scale-track">
+        {pct !== null && <span className="scale-dot" style={{ left: `${pct}%` }} />}
+      </span>
+      <span className="scale-end">{right}</span>
+    </div>
+  );
+}
+
+function matchPills(t, w) {
+  const m = w.matched || {};
   return [
-    answers.color && t.type(answers.color),
-    answers.body && t.body(answers.body),
-    answers.acidity && `${t.acidityTitle} ${t.acidity(answers.acidity).toLowerCase()}`,
-    ...answers.grapes,
-    ...answers.countries.map(t.country),
-    answers.discovery && (answers.discovery === "safe" ? t.safeTitle : t.explorerTitle),
+    m.color && t.type(m.color),
+    m.body && t.body(m.body),
+    m.acidity && `${t.acidityTitle} ${t.acidity(m.acidity).toLowerCase()}`,
+    ...(m.grapes || []),
+    m.country && t.country(m.country),
   ].filter(Boolean);
 }
 
-function Results({ t, options, answers, profiled, dish, onDish, wines, loading, busy, cellar, onFeedback, onQuiz, error, onRetry }) {
-  const summary = tasteSummary(t, answers);
+function reasonLine(t, w) {
+  if (w.basis === "similar" && w.similar_to) return t.why.similar(w.similar_to);
+  if (w.basis === "personal") return t.why.personal;
+  if (w.basis === "popular") return t.why.popular;
+  return null; // "taste": the pills say it
+}
+
+/* ------------------------------------------------------------------ results */
+function TasteProfile({ t, answers, onQuiz }) {
+  const bodyIdx = BODY_ORDER.indexOf(answers.body) + 1;
+  const acidIdx = ACIDITY_ORDER.indexOf(answers.acidity) + 1;
+  const style = answers.discovery === "safe" ? t.safeTitle : answers.discovery === "explorer" ? t.explorerTitle : null;
+  const words = [...answers.grapes, ...answers.countries.map(t.country)];
+  return (
+    <aside className="profile-card" aria-label={t.profileCard}>
+      <div className="profile-head">
+        <h2>{t.profileCard}</h2>
+        <button className="btn-chevron small" onClick={onQuiz}>{t.editTaste}<ChevronRight size={15} aria-hidden="true" /></button>
+      </div>
+      <div className="profile-row">
+        <span className="profile-label">{t.pColor}</span>
+        {answers.color ? (
+          <span className="profile-value"><span className="type-dot" style={{ background: TYPE_DOT[answers.color] }} />{t.type(answers.color)}</span>
+        ) : <span className="profile-value muted">{t.notSet}</span>}
+      </div>
+      <div className="profile-row">
+        <span className="profile-label">{t.pBody}</span>
+        <Scale value={bodyIdx} max={5} left={t.light} right={t.full} label={answers.body ? t.body(answers.body) : t.notSet} />
+      </div>
+      <div className="profile-row">
+        <span className="profile-label">{t.pAcidity}</span>
+        <Scale value={acidIdx} max={3} left={t.soft} right={t.crisp} label={answers.acidity ? t.acidity(answers.acidity) : t.notSet} />
+      </div>
+      <div className="profile-row">
+        <span className="profile-label">{t.pStyle}</span>
+        <span className={`profile-value ${style ? "" : "muted"}`}>{style || t.notSet}</span>
+      </div>
+      {words.length > 0 && (
+        <ul className="profile-words">{words.map((w) => <li key={w}>{w}</li>)}</ul>
+      )}
+    </aside>
+  );
+}
+
+function Results({ t, options, answers, profiled, opinions, dish, onDish, wines, loading, busy, justLiked, inCellar, onOpinion, onCellar, onOpen, onQuiz, error, onRetry }) {
+  const hasAnswers = Object.values(answers).some((v) => (Array.isArray(v) ? v.length : v));
+  const [hero, ...rest] = wines;
+  const [compact, setCompact] = useState(false);
+  useEffect(() => {
+    const onScroll = () => setCompact(window.scrollY > 320);
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
   return (
     <section className="results">
       <header className="results-head">
-        <h1>{profiled ? t.yourSelection : t.popularSelection}</h1>
-        <p className="results-sub">{profiled ? t.selectionIntro : t.popularIntro}</p>
-        {profiled && summary.length > 0 ? (
-          <div className="taste-line">
-            <ul className="taste-pills" aria-label={t.tasteSummary}>
-              {summary.map((s) => <li key={s}>{s}</li>)}
-            </ul>
-            <button className="btn-chevron" onClick={onQuiz}>{t.editTaste}<ChevronRight size={16} aria-hidden="true" /></button>
-          </div>
-        ) : (
-          !profiled && <button className="btn btn-primary" onClick={onQuiz}>{t.personalize}</button>
-        )}
+        <div className="results-copy">
+          {profiled && <p className="greeting">{t.greeting(new Date().getHours())}</p>}
+          <h1>
+            {profiled ? t.yourSelection : t.popularSelection}
+            {dish && <span className="h1-dish" key={dish}>{t.withDish(t.dishArticle[dish] || t.dish(dish).toLowerCase())}</span>}
+          </h1>
+          <p className="results-sub">{profiled ? t.selectionIntro : t.popularIntro}</p>
+          {opinions > 0 && (
+            <p className="learned">
+              <span className="learned-dot" aria-hidden="true" />
+              {t.learnedFrom(opinions).split(String(opinions))[0]}<CountUp value={opinions} />{t.learnedFrom(opinions).split(String(opinions))[1]}
+            </p>
+          )}
+          {!profiled && <button className="btn btn-primary" onClick={onQuiz}>{t.personalize}<ArrowRight size={18} aria-hidden="true" /></button>}
+        </div>
+        {hasAnswers && <TasteProfile t={t} answers={answers} onQuiz={onQuiz} />}
       </header>
 
-      <div className="dishes" role="group" aria-label={t.eatingTonight}>
-        <p className="dishes-label">{t.eatingTonight}</p>
-        <div className="dishes-row">
-          <DishButton active={!dish} onClick={() => onDish(null)} icon={UtensilsCrossed} label={t.anyDish} />
-          {options.dish_families.map((f) => (
-            <DishButton key={f.name} active={dish === f.name} onClick={() => onDish(f.name)} icon={DISH_ICONS[f.name] || UtensilsCrossed} label={t.dish(f.name)} />
-          ))}
+      <div className={`dishbar ${compact ? "compact" : ""}`} role="group" aria-label={t.eatingTonight}>
+        <div className="dishbar-inner">
+          <p className="dishes-label">{t.eatingTonight}</p>
+          <div className="dishes-row">
+            <DishButton active={!dish} onClick={() => onDish(null)} icon={UtensilsCrossed} label={t.anyDish} />
+            {options.dish_families.map((f) => (
+              <DishButton key={f.name} active={dish === f.name} onClick={() => onDish(f.name)} icon={DISH_ICONS[f.name] || UtensilsCrossed} label={t.dish(f.name)} />
+            ))}
+          </div>
         </div>
       </div>
 
-      {error && (
-        <div className="notice">
-          <span>{t.errorApi}</span>
-          <button className="btn btn-quiet" onClick={onRetry}>{t.retry}</button>
-        </div>
-      )}
-
-      <p className="hint-line">{t.actionsHint}</p>
-
-      <div className={`tiles ${loading ? "is-loading" : ""}`} aria-busy={loading}>
-        {wines.length === 0 && loading && Array.from({ length: 6 }, (_, k) => <div key={k} className="tile skeleton" />)}
+      <div className={`results-body ${loading ? "is-loading" : ""}`} aria-busy={loading}>
+        {error && (
+          <div className="notice">
+            <span>{t.errorApi}</span>
+            <button className="btn btn-quiet" onClick={onRetry}>{t.retry}</button>
+          </div>
+        )}
+        {wines.length === 0 && loading && <div className="hero-pick skeleton" />}
         {wines.length === 0 && !loading && <p className="empty">{t.noResult}</p>}
-        {wines.map((w, k) => (
-          <WineTile key={w.wine_id} t={t} rank={k + 1} wine={w} busy={busy === w.wine_id} saved={cellar.some((c) => c.wine_id === w.wine_id)} onFeedback={onFeedback} />
-        ))}
+        {hero && (
+          <HeroPick
+            key={hero.wine_id}
+            t={t}
+            answers={hasAnswers ? answers : null}
+            wine={hero}
+            busy={busy === hero.wine_id}
+            liked={justLiked === hero.wine_id}
+            saved={inCellar(hero)}
+            onOpinion={onOpinion}
+            onCellar={onCellar}
+            onOpen={onOpen}
+          />
+        )}
+        {rest.length > 0 && (
+          <>
+            <div className="section-head">
+              <h2>{t.alsoTitle}</h2>
+              <p>{t.actionsHint}</p>
+            </div>
+            <div className="tiles">
+              {rest.map((w, k) => (
+                <WineTile
+                  key={w.wine_id}
+                  t={t}
+                  answers={hasAnswers ? answers : null}
+                  k={k}
+                  rank={k + 2}
+                  wine={w}
+                  busy={busy === w.wine_id}
+                  liked={justLiked === w.wine_id}
+                  saved={inCellar(w)}
+                  onOpinion={onOpinion}
+                  onCellar={onCellar}
+                  onOpen={onOpen}
+                />
+              ))}
+            </div>
+          </>
+        )}
       </div>
     </section>
   );
@@ -630,89 +879,164 @@ function Results({ t, options, answers, profiled, dish, onDish, wines, loading, 
 function DishButton({ active, onClick, icon: Icon, label }) {
   return (
     <button className={`dish ${active ? "on" : ""}`} aria-pressed={active} onClick={onClick}>
-      <span className="dish-icon"><Icon size={24} strokeWidth={1.6} aria-hidden="true" /></span>
+      <span className="dish-icon"><Icon size={22} strokeWidth={1.6} aria-hidden="true" /></span>
       <span className="dish-name">{label}</span>
     </button>
   );
 }
 
-function reasonText(t, w) {
-  if (w.basis === "similar" && w.similar_to) return t.why.similar(w.similar_to);
-  if (w.basis === "taste") {
-    const m = w.matched || {};
-    const parts = [
-      m.color && t.type(m.color).toLowerCase(),
-      m.body && t.body(m.body).toLowerCase(),
-      m.acidity && `${t.acidityTitle.toLowerCase()} ${t.acidity(m.acidity).toLowerCase()}`,
-      ...(m.grapes || []),
-      m.country && t.country(m.country),
-    ].filter(Boolean);
-    return `${t.why.taste}${t.lang === "fr" ? " : " : ": "}${parts.join(", ")}`;
-  }
-  if (w.basis === "personal") return t.why.personal;
-  return t.why.popular;
+function Actions({ t, wine: w, busy, liked, saved, onOpinion, onCellar, large }) {
+  return (
+    <div className={`actions ${large ? "large" : ""}`}>
+      <button className={`pill pill-like ${liked ? "done" : ""}`} onClick={() => onOpinion(w, "like")} disabled={busy}>
+        <Heart size={17} fill={liked ? "currentColor" : "none"} aria-hidden="true" />
+        {liked ? t.liked : t.likeShort}
+      </button>
+      <button className="pill" onClick={() => onOpinion(w, "dislike")} disabled={busy} aria-label={t.dislikeShort} title={t.dislikeShort}>
+        <X size={17} aria-hidden="true" />
+        {large && t.dislikeShort}
+      </button>
+      <button className={`pill pill-cellar ${saved ? "on" : ""}`} onClick={() => onCellar(w)} aria-pressed={saved} aria-label={saved ? t.inCellar : t.addToCellar} title={saved ? t.inCellar : t.addToCellar}>
+        {saved ? <BookmarkCheck size={17} aria-hidden="true" /> : <Bookmark size={17} aria-hidden="true" />}
+        {large && (saved ? t.inCellar : t.addToCellar)}
+      </button>
+    </div>
+  );
 }
 
-function WineTile({ t, rank, wine: w, busy, saved, onFeedback }) {
-  const bodyLevel = BODY_ORDER.indexOf(w.body) + 1;
-  const acidLevel = ACIDITY_ORDER.indexOf(w.acidity) + 1;
-  const place = [w.region, t.country(w.country)].filter(Boolean).join(", ");
-  const safe = w.popularity_rank <= 500;
+function HeroPick({ t, answers, wine: w, busy, liked, saved, onOpinion, onCellar, onOpen }) {
+  const pills = matchPills(t, w);
+  const reason = reasonLine(t, w);
+  const bodyIdx = BODY_ORDER.indexOf(w.body) + 1;
+  const acidIdx = ACIDITY_ORDER.indexOf(w.acidity) + 1;
   return (
-    <article className={`tile ${busy ? "leaving" : ""}`} aria-labelledby={`w-${w.wine_id}`}>
-      <div className="tile-stage">
-        <span className="tile-rank" aria-label={t.rankLabel(rank)}>{String(rank).padStart(2, "0")}</span>
-        <span className={`tile-badge ${safe ? "safe" : "disc"}`}>{safe ? t.safeBadge : t.discoveryBadge}</span>
-        <Bottle type={w.type} grapes={w.grapes} winery={w.winery} name={w.name} height={236} />
-      </div>
-      <div className="tile-body">
-        <p className="tile-eyebrow">{t.type(w.type)}</p>
-        <h2 id={`w-${w.wine_id}`} className="tile-name">{w.name}</h2>
-        <p className="tile-place" title={[w.winery, place].filter(Boolean).join(" · ")}>
-          {[w.winery, place].filter(Boolean).join(" · ")}
-        </p>
-        <dl className="tile-facts">
-          {bodyLevel > 0 && (
-            <div><dt>{t.bodyTitle}</dt><dd><Meter value={bodyLevel} max={5} label={t.body(w.body)} /></dd></div>
-          )}
-          {acidLevel > 0 && (
-            <div><dt>{t.acidityTitle}</dt><dd><Meter value={acidLevel} max={3} label={t.acidity(w.acidity)} /></dd></div>
-          )}
-          {w.abv ? (
-            <div><dt>{t.abv}</dt><dd>{w.abv.toLocaleString(t.lang)} %</dd></div>
-          ) : null}
-        </dl>
-        {w.grapes.length > 0 && <p className="tile-grapes">{w.grapes.slice(0, 3).join(", ")}</p>}
-        <div className={`tile-why ${w.basis}`}>
-          <p>{reasonText(t, w)}</p>
-          {w.pairs_with && <p className="tile-pairs">{t.why.pairs(t.dishLabel(w.pairs_with))}</p>}
+    <article className={`hero-pick ${liked ? "liked" : ""}`} aria-labelledby={`h-${w.wine_id}`}>
+      <button className="hero-stage" style={tint(w.type)} onClick={() => onOpen(w)} aria-label={`${t.seeDetail} : ${w.name}`}>
+        <Watermark text={w.region || w.country} width={520} />
+        <span className="stage-glow" aria-hidden="true" />
+        <Bottle type={w.type} grapes={w.grapes} winery={w.winery} name={w.name} height={400} />
+        {liked && <span className="liked-burst" aria-hidden="true"><Heart size={56} fill="currentColor" /></span>}
+      </button>
+      <div className="hero-info">
+        <div className="hero-top">
+          <p className="eyebrow">{t.heroPickTitle}</p>
+          <Criteria t={t} answers={answers} wine={w} />
         </div>
-      </div>
-      <div className="tile-actions">
-        <div className="tile-actions-row">
-          <button className="pill pill-like" onClick={() => onFeedback(w, "like")} disabled={busy}>
-            <Heart size={17} aria-hidden="true" />
-            {t.likeShort}
-          </button>
-          <button className="pill" onClick={() => onFeedback(w, "dislike")} disabled={busy}>
-            <X size={17} aria-hidden="true" />
-            {t.dislikeShort}
-          </button>
+        <h2 id={`h-${w.wine_id}`}>{w.name}</h2>
+        <p className="hero-place">{[w.winery, w.region, t.country(w.country)].filter(Boolean).join(" · ")}</p>
+        {pills.length > 0 && (
+          <ul className="match" aria-label={t.matchTitle}>
+            {pills.map((p) => <li key={p}><Check size={13} strokeWidth={3} aria-hidden="true" />{p}</li>)}
+          </ul>
+        )}
+        {reason && <p className={`reason ${w.basis}`}>{reason}</p>}
+        <div className="hero-scales">
+          {bodyIdx > 0 && <div><span className="profile-label">{t.pBody}</span><Scale value={bodyIdx} max={5} left={t.light} right={t.full} label={t.body(w.body)} /></div>}
+          {acidIdx > 0 && <div><span className="profile-label">{t.pAcidity}</span><Scale value={acidIdx} max={3} left={t.soft} right={t.crisp} label={t.acidity(w.acidity)} /></div>}
         </div>
-        <button className={`cellar-btn ${saved ? "on" : ""}`} onClick={() => onFeedback(w, "add_to_cellar")} disabled={busy || saved}>
-          {saved ? <BookmarkCheck size={17} aria-hidden="true" /> : <Bookmark size={17} aria-hidden="true" />}
-          {saved ? t.inCellar : t.addToCellar}
-        </button>
+        {w.pairs_with && <p className="pairs">{t.why.pairs(t.dishLabel(w.pairs_with))}</p>}
+        <Actions t={t} wine={w} busy={busy} liked={liked} saved={saved} onOpinion={onOpinion} onCellar={onCellar} large />
+        <button className="btn-chevron" onClick={() => onOpen(w)}>{t.seeDetail}<ChevronRight size={16} aria-hidden="true" /></button>
       </div>
     </article>
   );
 }
 
-/* ------------------------------------------------------------------ cellar page */
-function CellarPage({ t, cellar, liked, answers, profiled, onRemove, onBack, onQuiz }) {
-  const summary = tasteSummary(t, answers);
-  const hasAnswers = summary.length > 0;
-  const byType = TYPE_ORDER.map((ty) => [ty, cellar.filter((w) => w.type === ty).length]).filter(([, n]) => n);
+function WineTile({ t, answers, k, rank, wine: w, busy, liked, saved, onOpinion, onCellar, onOpen }) {
+  const pills = matchPills(t, w).slice(0, 3);
+  const reason = reasonLine(t, w);
+  return (
+    <article className={`tile ${busy && !liked ? "leaving" : ""} ${liked ? "liked" : ""}`} style={{ "--d": `${k * 50}ms` }} aria-labelledby={`w-${w.wine_id}`}>
+      <button className="tile-stage" style={tint(w.type)} onClick={() => onOpen(w)} aria-label={`${t.seeDetail} : ${w.name}`}>
+        <span className="tile-rank">{t.num(rank)}</span>
+        <span className="stage-glow" aria-hidden="true" />
+        <Bottle type={w.type} grapes={w.grapes} winery={w.winery} name={w.name} height={210} />
+        {liked && <span className="liked-burst" aria-hidden="true"><Heart size={42} fill="currentColor" /></span>}
+      </button>
+      <div className="tile-body">
+        <p className="tile-eyebrow">{t.type(w.type)} · {t.country(w.country)}</p>
+        <h3 id={`w-${w.wine_id}`} className="tile-name">
+          <button className="tile-name-btn" onClick={() => onOpen(w)}>{w.name}</button>
+        </h3>
+        <p className="tile-place">{[w.winery, w.region].filter(Boolean).join(" · ")}</p>
+        <Criteria t={t} answers={answers} wine={w} />
+        {pills.length > 0 ? (
+          <ul className="match">{pills.map((p) => <li key={p}><Check size={12} strokeWidth={3} aria-hidden="true" />{p}</li>)}</ul>
+        ) : (
+          reason && <p className={`reason ${w.basis}`}>{reason}</p>
+        )}
+        {pills.length > 0 && w.basis === "similar" && reason && <p className="reason similar">{reason}</p>}
+      </div>
+      <Actions t={t} wine={w} busy={busy} liked={liked} saved={saved} onOpinion={onOpinion} onCellar={onCellar} />
+    </article>
+  );
+}
+
+/* ------------------------------------------------------------------ wine sheet (essentials only) */
+function Detail({ t, answers, wine: w, saved, busy, onClose, onOpinion, onCellar }) {
+  const closeRef = useRef(null);
+  useEffect(() => {
+    closeRef.current?.focus();
+    const onKey = (e) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = "";
+    };
+  }, [onClose]);
+  const pills = matchPills(t, w);
+  const reason = reasonLine(t, w);
+  const bodyIdx = BODY_ORDER.indexOf(w.body) + 1;
+  const acidIdx = ACIDITY_ORDER.indexOf(w.acidity) + 1;
+  return (
+    <div className="sheet-backdrop" onClick={onClose}>
+      <div className="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title" onClick={(e) => e.stopPropagation()}>
+        <button ref={closeRef} className="sheet-close" onClick={onClose} aria-label={t.close}><X size={18} aria-hidden="true" /></button>
+        <div className="sheet-stage" style={tint(w.type)}>
+          <Watermark text={w.region || w.country} width={370} />
+          <span className="stage-glow" aria-hidden="true" />
+          <Bottle type={w.type} grapes={w.grapes} winery={w.winery} name={w.name} height={400} />
+        </div>
+        <div className="sheet-info">
+          <p className="eyebrow">{t.type(w.type)} · {t.country(w.country)}</p>
+          <h2 id="sheet-title">{w.name}</h2>
+          <p className="hero-place">{[w.winery, w.region].filter(Boolean).join(" · ")}</p>
+          <Criteria t={t} answers={answers} wine={w} />
+          {(pills.length > 0 || reason) && (
+            <div className="sheet-why">
+              {pills.length > 0 && <ul className="match">{pills.map((p) => <li key={p}><Check size={13} strokeWidth={3} aria-hidden="true" />{p}</li>)}</ul>}
+              {reason && <p className={`reason ${w.basis}`}>{reason}</p>}
+            </div>
+          )}
+          <div className="sheet-section">
+            <h3>{t.keyFacts}</h3>
+            {bodyIdx > 0 && <div className="sheet-scale"><span className="profile-label">{t.pBody}</span><Scale value={bodyIdx} max={5} left={t.light} right={t.full} label={t.body(w.body)} /></div>}
+            {acidIdx > 0 && <div className="sheet-scale"><span className="profile-label">{t.pAcidity}</span><Scale value={acidIdx} max={3} left={t.soft} right={t.crisp} label={t.acidity(w.acidity)} /></div>}
+            <p className="sheet-line">
+              {w.grapes.slice(0, 3).join(", ")}
+              {w.abv ? ` · ${w.abv.toLocaleString(t.lang)} %` : ""}
+            </p>
+          </div>
+          {w.dishes?.length > 0 && (
+            <div className="sheet-section">
+              <h3>{t.pairsWithTitle}</h3>
+              <p className="sheet-line">{w.dishes.slice(0, 5).map((d) => t.dishLabel(d)).join(", ")}</p>
+            </div>
+          )}
+          <Actions t={t} wine={w} busy={busy} liked={false} saved={saved} onOpinion={onOpinion} onCellar={onCellar} large />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ cellar & favourites */
+function CellarPage({ t, tab, onTab, cellar, liked, suggestions, answers, busy, inCellar, onCellar, onOpinion, onOpen, onBack, onQuiz }) {
+  const list = tab === "cellar" ? cellar : liked;
+  const shownIds = new Set(list.map((w) => w.wine_id));
+  const ideas = suggestions.filter((w) => !shownIds.has(w.wine_id) && !inCellar(w)).slice(0, 4);
+  const hasAnswers = Object.values(answers).some((v) => (Array.isArray(v) ? v.length : v));
   return (
     <section className="cellar">
       <header className="cellar-head">
@@ -720,80 +1044,74 @@ function CellarPage({ t, cellar, liked, answers, profiled, onRemove, onBack, onQ
           <ArrowLeft size={16} aria-hidden="true" />
           {t.backToSelection}
         </button>
-        <h1>{t.cellarHero}</h1>
-        <p className="cellar-count">
-          {t.cellarCount(cellar.length)}
-          {byType.length > 0 && <span> · {byType.map(([ty, n]) => `${n} ${t.type(ty).toLowerCase()}${n > 1 && !t.type(ty).endsWith("s") ? "s" : ""}`).join(", ")}</span>}
-        </p>
+        <h1>{tab === "cellar" ? t.cellarHero : t.favorites}</h1>
+        <p className="results-sub">{tab === "cellar" ? t.cellarCount(cellar.length) : t.selectionCount(liked.length)}</p>
+        <div className="segmented" role="tablist">
+          <button role="tab" aria-selected={tab === "cellar"} className={tab === "cellar" ? "on" : ""} onClick={() => onTab("cellar")}>
+            {t.tabCellar} <span>{cellar.length}</span>
+          </button>
+          <button role="tab" aria-selected={tab === "favorites"} className={tab === "favorites" ? "on" : ""} onClick={() => onTab("favorites")}>
+            {t.tabFavorites} <span>{liked.length}</span>
+          </button>
+        </div>
       </header>
 
-      {cellar.length === 0 ? (
-        <div className="shelf-empty">
-          <div className="ghosts" aria-hidden="true">
-            {["Red", "White", "Sparkling", "Rosé", "Red"].map((ty, k) => (
-              <span key={k} className="ghost"><Bottle type={ty} height={180} reflection={false} label={false} /></span>
-            ))}
-          </div>
-          <div className="shelf-line" />
-          <h2>{t.cellarEmptyTitle}</h2>
-          <p>{t.cellarEmptyText}</p>
-          <button className="btn btn-primary" onClick={onBack}>{t.backToSelection}</button>
-        </div>
-      ) : (
-        <div className="shelf">
-          <ul className="shelf-row" aria-hidden="true">
-            {cellar.map((w) => (
-              <li key={w.wine_id} className="shelf-item">
-                <Bottle type={w.type} grapes={w.grapes} winery={w.winery} name={w.name} height={220} reflection={false} />
-              </li>
-            ))}
-          </ul>
-          <div className="shelf-line" />
-          <ul className="shelf-labels">
-            {cellar.map((w) => (
-              <li key={w.wine_id} className="shelf-meta">
-                <p className="shelf-name">{w.name}</p>
-                <p className="shelf-place">{[t.type(w.type), t.country(w.country)].join(" · ")}</p>
-                <button className="link" onClick={() => onRemove(w.wine_id)}>{t.remove}</button>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      <div className="cellar-panels">
-        <div className="panel">
-          <h2>{t.favorites}</h2>
-          {liked.length === 0 ? (
-            <p className="panel-empty">{t.favoritesEmpty}</p>
-          ) : (
-            <ul className="fav-list">
-              {liked.map((w) => (
-                <li key={w.wine_id}>
-                  <span className="fav-art"><Bottle type={w.type} grapes={w.grapes} height={70} reflection={false} label={false} /></span>
-                  <div>
-                    <p className="fav-name">{w.name}</p>
-                    <p className="fav-meta">{[w.winery, t.country(w.country)].filter(Boolean).join(" · ")}</p>
-                  </div>
+      <div className="cellar-body">
+        {list.length > 0 && (
+          <div className="shelf">
+            <ul className="shelf-row">
+              {list.map((w, k) => (
+                <li key={w.wine_id} className="shelf-item" style={{ "--d": `${k * 70}ms` }}>
+                  <button className="shelf-bottle" onClick={() => onOpen(w)} aria-label={`${t.seeDetail} : ${w.name}`}>
+                    <Bottle type={w.type} grapes={w.grapes} winery={w.winery} name={w.name} height={220} reflection={false} />
+                  </button>
                 </li>
               ))}
             </ul>
-          )}
-        </div>
-        <div className="panel">
-          <h2>{t.profileTitle}</h2>
-          {hasAnswers ? (
-            <>
-              <ul className="taste-pills">{summary.map((s) => <li key={s}>{s}</li>)}</ul>
-              <button className="btn-chevron" onClick={onQuiz}>{t.editTaste}<ChevronRight size={16} aria-hidden="true" /></button>
-            </>
-          ) : (
-            <>
-              <p className="panel-empty">{profiled ? t.noAnswers : t.profileEmpty}</p>
-              <button className="btn btn-primary" onClick={onQuiz}>{t.startQuiz}</button>
-            </>
-          )}
-        </div>
+            <div className="shelf-line" />
+            <ul className="shelf-labels">
+              {list.map((w) => (
+                <li key={w.wine_id} className="shelf-meta">
+                  <p className="shelf-name">{w.name}</p>
+                  <p className="shelf-place">{[t.type(w.type), t.country(w.country)].join(" · ")}</p>
+                  {tab === "cellar" && <button className="link" onClick={() => onCellar(w)}>{t.remove}</button>}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {ideas.length > 0 && (
+          <div className="ideas">
+            <div className="section-head">
+              <h2>{list.length === 0 ? (tab === "cellar" ? t.cellarEmptyTitle : t.suggestFavTitle) : t.suggestTitle}</h2>
+              {list.length === 0 && <p>{tab === "cellar" ? t.suggestTitle : t.favoritesEmpty}</p>}
+            </div>
+            <div className="ideas-row">
+              {ideas.map((w, k) => (
+                <div key={w.wine_id} className="idea" style={{ "--d": `${k * 60}ms` }}>
+                  <button className="idea-stage" style={tint(w.type)} onClick={() => onOpen(w)} aria-label={`${t.seeDetail} : ${w.name}`}>
+                    <Bottle type={w.type} grapes={w.grapes} winery={w.winery} name={w.name} height={170} reflection={false} />
+                  </button>
+                  <p className="shelf-name">{w.name}</p>
+                  <p className="shelf-place">{[t.type(w.type), t.country(w.country)].join(" · ")}</p>
+                  {tab === "cellar" ? (
+                    <button className="pill pill-small" onClick={() => onCellar(w)}><Plus size={15} aria-hidden="true" />{t.add}</button>
+                  ) : (
+                    <button className="pill pill-small pill-like" onClick={() => onOpinion(w, "like")} disabled={busy === w.wine_id}><Heart size={15} aria-hidden="true" />{t.likeShort}</button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {!hasAnswers && (
+          <div className="quiz-cta">
+            <p>{t.profileEmpty}</p>
+            <button className="btn btn-primary" onClick={onQuiz}>{t.startQuiz}</button>
+          </div>
+        )}
       </div>
     </section>
   );
