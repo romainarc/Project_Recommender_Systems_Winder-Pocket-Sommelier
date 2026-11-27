@@ -943,31 +943,53 @@ function HeroPick({ t, answers, wine: w, busy, liked, saved, onOpinion, onCellar
 }
 
 function WineTile({ t, answers, k, rank, wine: w, busy, liked, saved, onOpinion, onCellar, onOpen }) {
-  const pills = matchPills(t, w).slice(0, 3);
+  // the eyebrow already says type and country: the pills only add what it does not
+  const m = w.matched || {};
+  const pills = [
+    m.body && t.body(m.body),
+    m.acidity && `${t.acidityTitle} ${t.acidity(m.acidity).toLowerCase()}`,
+    ...(m.grapes || []),
+  ].filter(Boolean).slice(0, 3);
   const reason = reasonLine(t, w);
+  const cellarLabel = saved ? t.inCellar : t.addToCellar;
   return (
     <article className={`tile ${busy && !liked ? "leaving" : ""} ${liked ? "liked" : ""}`} style={{ "--d": `${k * 50}ms` }} aria-labelledby={`w-${w.wine_id}`}>
-      <button className="tile-stage" style={tint(w.type)} onClick={() => onOpen(w)} aria-label={`${t.seeDetail} : ${w.name}`}>
+      <div className="tile-stage" style={tint(w.type)}>
+        <button className="stage-hit" onClick={() => onOpen(w)} aria-label={`${t.seeDetail} : ${w.name}`} />
         <span className="tile-rank">{t.num(rank)}</span>
         <span className="stage-glow" aria-hidden="true" />
         <Bottle type={w.type} grapes={w.grapes} winery={w.winery} name={w.name} height={210} />
+        <button className={`stage-cellar ${saved ? "on" : ""}`} onClick={() => onCellar(w)} aria-pressed={saved} aria-label={cellarLabel}>
+          {saved ? <BookmarkCheck size={18} aria-hidden="true" /> : <Bookmark size={18} aria-hidden="true" />}
+          <span className="stage-cellar-label">{cellarLabel}</span>
+        </button>
         {liked && <span className="liked-burst" aria-hidden="true"><Heart size={42} fill="currentColor" /></span>}
-      </button>
+      </div>
       <div className="tile-body">
-        <p className="tile-eyebrow">{t.type(w.type)} · {t.country(w.country)}</p>
+        <p className="tile-eyebrow">
+          {t.type(w.type)} · {t.country(w.country)}
+          {(m.color || m.country) && <Check size={13} strokeWidth={3} className="eyebrow-check" aria-hidden="true" />}
+        </p>
         <h3 id={`w-${w.wine_id}`} className="tile-name">
           <button className="tile-name-btn" onClick={() => onOpen(w)}>{w.name}</button>
         </h3>
         <p className="tile-place">{[w.winery, w.region].filter(Boolean).join(" · ")}</p>
-        <Criteria t={t} answers={answers} wine={w} />
-        {pills.length > 0 ? (
-          <ul className="match">{pills.map((p) => <li key={p}><Check size={12} strokeWidth={3} aria-hidden="true" />{p}</li>)}</ul>
-        ) : (
-          reason && <p className={`reason ${w.basis}`}>{reason}</p>
-        )}
-        {pills.length > 0 && w.basis === "similar" && reason && <p className="reason similar">{reason}</p>}
+        <div className="tile-meta">
+          <Criteria t={t} answers={answers} wine={w} />
+          {pills.length > 0 && <ul className="match">{pills.map((p) => <li key={p}><Check size={12} strokeWidth={3} aria-hidden="true" />{p}</li>)}</ul>}
+          {reason && (pills.length === 0 || w.basis === "similar") && <p className={`reason ${w.basis}`}>{reason}</p>}
+        </div>
       </div>
-      <Actions t={t} wine={w} busy={busy} liked={liked} saved={saved} onOpinion={onOpinion} onCellar={onCellar} />
+      <div className="tile-actions">
+        <button className={`act act-like ${liked ? "done" : ""}`} onClick={() => onOpinion(w, "like")} disabled={busy}>
+          <Heart size={16} fill={liked ? "currentColor" : "none"} aria-hidden="true" />
+          {liked ? t.liked : t.likeShort}
+        </button>
+        <button className="act act-no" onClick={() => onOpinion(w, "dislike")} disabled={busy}>
+          <X size={16} aria-hidden="true" />
+          {t.dislikeShort}
+        </button>
+      </div>
     </article>
   );
 }

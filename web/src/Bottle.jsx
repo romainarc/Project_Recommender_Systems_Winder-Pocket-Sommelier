@@ -48,6 +48,19 @@ function shorten(text, n) {
   return text.length > n ? text.slice(0, n - 1).trimEnd() + "…" : text;
 }
 
+// usable label width (in canvas units) on the body of each silhouette
+const LABEL_WIDTH = { bordeaux: 56, burgundy: 60, flute: 38, champagne: 66, half: 44 };
+
+// shrink the type to fit the bottle first, and only cut the text when it would get unreadable
+function fit(text, width, base, min, charW, spacing = 0) {
+  const t = text || "";
+  if (!t) return { text: "", size: base };
+  const per = (size) => size * charW + spacing;
+  const size = Math.max(min, Math.min(base, width / (t.length * per(1) || 1)));
+  const n = Math.floor(width / (size * charW + spacing));
+  return { text: shorten(t, Math.max(4, n)), size };
+}
+
 export default function Bottle({ type = "Red", grapes = [], winery, name, height = 260, reflection = true, label = true }) {
   const id = useId().replace(/:/g, "");
   const c = bottleColors(type);
@@ -61,6 +74,9 @@ export default function Bottle({ type = "Red", grapes = [], winery, name, height
   const capW = shape === "champagne" ? 24 : shape === "flute" ? 18 : 22;
   const capX = 60 - capW / 2;
   const total = reflection ? 470 : 400;
+  const lw = LABEL_WIDTH[shape];
+  const top = fit((winery || "").toUpperCase(), lw, 7, 5, 0.72, 1.1);
+  const main = fit(name || "", lw, 9.5, 6.5, 0.48);
 
   return (
     <svg
@@ -120,12 +136,12 @@ export default function Bottle({ type = "Red", grapes = [], winery, name, height
               <rect x="0" y={labelTop} width="120" height={labelH} fill={`url(#paper${id})`} />
               <rect x="0" y={labelTop + 6} width="120" height="0.8" fill={c.ink} opacity="0.35" />
               <rect x="0" y={labelTop + labelH - 7} width="120" height="0.8" fill={c.ink} opacity="0.35" />
-              <text x="60" y={labelTop + 30} textAnchor="middle" fill={c.ink} fontSize="7" letterSpacing="1.4" fontFamily="Georgia, serif">
-                {shorten((winery || "").toUpperCase(), 16)}
+              <text x="60" y={labelTop + 30} textAnchor="middle" fill={c.ink} fontSize={top.size.toFixed(2)} letterSpacing="1.1" fontFamily="Georgia, serif">
+                {top.text}
               </text>
               <line x1="48" x2="72" y1={labelTop + 40} y2={labelTop + 40} stroke={c.ink} strokeWidth="0.6" opacity="0.6" />
-              <text x="60" y={labelTop + 58} textAnchor="middle" fill={c.ink} fontSize="9.5" fontStyle="italic" fontFamily="Georgia, serif">
-                {shorten(name || "", 17)}
+              <text x="60" y={labelTop + 58} textAnchor="middle" fill={c.ink} fontSize={main.size.toFixed(2)} fontStyle="italic" fontFamily="Georgia, serif">
+                {main.text}
               </text>
               <text x="60" y={labelTop + 76} textAnchor="middle" fill={c.ink} fontSize="5.5" letterSpacing="1.6" opacity="0.75" fontFamily="Helvetica, Arial, sans-serif">
                 {(type || "").toUpperCase()}

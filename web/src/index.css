@@ -386,3 +386,32 @@ main { width: 100%; }
 .dishbar.compact .dish-icon svg { width: 16px; height: 16px; }
 .dishbar.compact .dish:not(.on) .dish-name { display: none; }
 .dishbar.compact .dish.on .dish-name { font-size: 0.82rem; }
+
+/* ------------------------------------------------ round 5: tile actions */
+.tile-stage { cursor: default; }
+.stage-hit { position: absolute; inset: 0; z-index: 1; border: 0; background: none; cursor: pointer; border-radius: 0; }
+.stage-hit:focus-visible { outline-offset: -4px; }
+.tile-stage .bottle { pointer-events: none; }
+.stage-cellar { position: absolute; z-index: 2; top: 12px; right: 12px; height: 38px; min-width: 38px; padding: 0 10px; display: inline-flex; align-items: center; gap: 0; border: 0; border-radius: 980px; cursor: pointer; background: rgba(255, 255, 255, 0.82); backdrop-filter: blur(8px); color: var(--ink-2); box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08); transition: background 0.25s var(--ease), color 0.25s var(--ease), gap 0.3s var(--spring), transform 0.2s var(--spring); }
+.stage-cellar-label { max-width: 0; overflow: hidden; white-space: nowrap; font-size: 0.8rem; font-weight: 600; transition: max-width 0.35s var(--spring); }
+.stage-cellar:hover, .stage-cellar:focus-visible { gap: 6px; background: #fff; color: var(--brand); }
+.stage-cellar:hover .stage-cellar-label, .stage-cellar:focus-visible .stage-cellar-label { max-width: 160px; }
+.stage-cellar:active { transform: scale(0.95); }
+.stage-cellar.on { background: #e5f2ea; color: var(--ok); gap: 6px; }
+.stage-cellar.on .stage-cellar-label { max-width: 160px; }
+.stage-cellar.on svg { animation: pop 0.45s var(--spring); }
+.tile-rank { z-index: 2; pointer-events: none; }
+.eyebrow-check { margin-left: 6px; vertical-align: -2px; color: var(--brand); }
+.tile-meta { display: grid; gap: 8px; margin-top: 2px; }
+.tile-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 12px 18px 18px; }
+.act { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 42px; border-radius: 980px; border: 1.5px solid transparent; cursor: pointer; font-size: 0.88rem; font-weight: 600; white-space: nowrap; transition: background 0.25s var(--ease), color 0.25s var(--ease), border-color 0.25s var(--ease), transform 0.2s var(--spring); }
+.act:active:not(:disabled) { transform: scale(0.96); }
+.act:disabled { cursor: default; opacity: 0.6; }
+.act-like { background: var(--brand-tint); color: var(--brand); }
+.act-like:hover:not(:disabled) { background: var(--brand); color: #fff; }
+.act-like.done { background: var(--brand); color: #fff; }
+.act-like.done svg { animation: beat 0.7s var(--spring); }
+.act-no { background: #fff; color: var(--ink-2); border-color: var(--line-soft); }
+.act-no:hover:not(:disabled) { border-color: var(--line); background: var(--stage); }
+.tile-actions { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); padding: 12px 14px 16px; }
+.act { gap: 5px; padding: 0 8px; font-size: 0.84rem; }
