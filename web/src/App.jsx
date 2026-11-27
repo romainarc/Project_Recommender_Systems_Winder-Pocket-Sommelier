@@ -31,14 +31,6 @@ function criteria(answers, w) {
   return { got, asked };
 }
 
-// region name in big letters behind the bottle, sized so the whole word fits the stage
-function Watermark({ text, width }) {
-  const word = (text || "").toUpperCase();
-  if (!word) return null;
-  const size = Math.max(26, Math.min(92, (width * 0.8) / (word.length * 0.64)));
-  return <span className="watermark" style={{ fontSize: `${size}px` }} aria-hidden="true">{word}</span>;
-}
-
 function Criteria({ t, answers, wine }) {
   const c = criteria(answers, wine);
   if (!c) return null;
@@ -450,29 +442,10 @@ function Nav({ t, screen, cellarCount, bump, answers, profiled, opinions, onGo, 
             <span className={t.lang === "fr" ? "on" : ""}>FR</span>
             <span className={t.lang === "en" ? "on" : ""}>EN</span>
           </button>
-          <button className={`palate ${open ? "open" : ""}`} onClick={() => setOpen((o) => !o)} aria-expanded={open} aria-haspopup="menu">
-            <span className="palate-glass">{glass}</span>
-            <span className="palate-text">
-              <span className="palate-kicker">{t.palate}</span>
-              <span className="palate-value">{profiled && summary.length ? summary.slice(0, 2).join(" · ") : t.palateEmpty}</span>
-            </span>
-            <ChevronRight size={15} className="palate-chev" aria-hidden="true" />
+          <button className="nav-text" onClick={onNewVisitor}>
+            <RotateCcw size={15} aria-hidden="true" />
+            {t.newVisitor}
           </button>
-          {open && (
-            <div className="palate-menu" role="menu">
-              <div className="pm-head">
-                <span className="pm-glass">{glass}</span>
-                <div>
-                  <p className="pm-title">{profiled && summary.length ? summary.join(" · ") : t.palateEmpty}</p>
-                  <p className="pm-sub">{opinions > 0 ? t.learnedFrom(opinions) : t.palateHint}</p>
-                </div>
-              </div>
-              <button role="menuitem" className="pm-item" onClick={go(onQuiz)}><SlidersHorizontal size={16} aria-hidden="true" />{t.editTaste}</button>
-              <button role="menuitem" className="pm-item" onClick={go(() => onGo("cellar", "cellar"))}><Bookmark size={16} aria-hidden="true" />{t.navCellar}{cellarCount > 0 && <span className="pm-count">{cellarCount}</span>}</button>
-              <div className="pm-sep" />
-              <button role="menuitem" className="pm-item quiet" onClick={go(onNewVisitor)}><RotateCcw size={16} aria-hidden="true" />{t.newVisitor}</button>
-            </div>
-          )}
         </div>
       </div>
     </header>
@@ -835,18 +808,6 @@ function ChipPicker({ t, all, featured, selected, max, label, onToggle }) {
   );
 }
 
-/* ------------------------------------------------------------------ shared bits */
-function Meter({ value, max, label }) {
-  return (
-    <span className="meter" role="img" aria-label={label}>
-      {Array.from({ length: max }, (_, k) => (
-        <span key={k} className={k < value ? "on" : ""} />
-      ))}
-    </span>
-  );
-}
-
-// a labelled scale with a marker: "Léger ——●—— Corsé"
 function Scale({ value, max, left, right, label }) {
   const pct = value > 0 ? ((value - 1) / (max - 1)) * 100 : null;
   return (
@@ -878,57 +839,13 @@ function reasonLine(t, w) {
   return null; // "taste": the pills say it
 }
 
-/* ------------------------------------------------------------------ results */
-function TasteProfile({ t, answers, onQuiz }) {
-  const bodyIdx = BODY_ORDER.indexOf(answers.body) + 1;
-  const acidIdx = ACIDITY_ORDER.indexOf(answers.acidity) + 1;
-  const style = answers.discovery === "safe" ? t.safeTitle : answers.discovery === "explorer" ? t.explorerTitle : null;
-  const words = [...answers.grapes, ...answers.countries.map(t.country)];
-  return (
-    <aside className="profile-card" aria-label={t.profileCard}>
-      <div className="profile-head">
-        <h2>{t.profileCard}</h2>
-        <button className="btn btn-secondary btn-sm" onClick={onQuiz}><SlidersHorizontal size={15} aria-hidden="true" />{t.editTaste}</button>
-      </div>
-      <div className="profile-row">
-        <span className="profile-label">{t.pColor}</span>
-        {answers.color ? (
-          <span className="profile-value"><span className="type-dot" style={{ background: TYPE_DOT[answers.color] }} />{t.type(answers.color)}</span>
-        ) : <span className="profile-value muted">{t.notSet}</span>}
-      </div>
-      <div className="profile-row">
-        <span className="profile-label">{t.pBody}</span>
-        <Scale value={bodyIdx} max={5} left={t.light} right={t.full} label={answers.body ? t.body(answers.body) : t.notSet} />
-      </div>
-      <div className="profile-row">
-        <span className="profile-label">{t.pAcidity}</span>
-        <Scale value={acidIdx} max={3} left={t.soft} right={t.crisp} label={answers.acidity ? t.acidity(answers.acidity) : t.notSet} />
-      </div>
-      <div className="profile-row">
-        <span className="profile-label">{t.pStyle}</span>
-        <span className={`profile-value ${style ? "" : "muted"}`}>{style || t.notSet}</span>
-      </div>
-      {words.length > 0 && (
-        <ul className="profile-words">{words.map((w) => <li key={w}>{w}</li>)}</ul>
-      )}
-    </aside>
-  );
-}
-
-// a short, personal note written from the answers, signed like a sommelier's card
 function SommelierNote({ t, answers: a }) {
-  const text = t.note({
+  return t.note({
     what: t.noteWhat(a.color && t.type(a.color), a.body && t.body(a.body)),
     grape: a.grapes[0],
     place: a.countries[0] && t.notePlace(t.country(a.countries[0])),
     style: a.discovery,
   });
-  return (
-    <figure className="som-note">
-      <blockquote>{text}</blockquote>
-      <figcaption><LogoMark size={22} animate={false} />{t.signature}</figcaption>
-    </figure>
-  );
 }
 
 function Results({ t, options, answers, profiled, opinions, dish, onDish, wines, loading, busy, justLiked, inCellar, onOpinion, onCellar, onOpen, onQuiz, error, onRetry }) {
@@ -942,23 +859,24 @@ function Results({ t, options, answers, profiled, opinions, dish, onDish, wines,
   }, []);
   return (
     <section className="results">
-      <header className="results-head">
-        <div className="results-copy">
-          {profiled && <p className="greeting">{t.greeting(new Date().getHours())}</p>}
-          <h1>
-            {profiled ? t.yourSelection : t.popularSelection}
-            {dish && <span className="h1-dish" key={dish}>{t.withDish(t.dishArticle[dish] || t.dish(dish).toLowerCase())}</span>}
-          </h1>
-          {profiled && hasAnswers ? <SommelierNote t={t} answers={answers} /> : <p className="results-sub">{profiled ? t.selectionIntro : t.popularIntro}</p>}
-          {opinions > 0 && (
-            <p className="learned">
-              <span className="learned-dot" aria-hidden="true" />
-              {t.learnedFrom(opinions).split(String(opinions))[0]}<CountUp value={opinions} />{t.learnedFrom(opinions).split(String(opinions))[1]}
-            </p>
-          )}
-          {!profiled && <button className="btn btn-primary" onClick={onQuiz}>{t.personalize}<ArrowRight size={18} aria-hidden="true" /></button>}
-        </div>
-        {hasAnswers && <TasteProfile t={t} answers={answers} onQuiz={onQuiz} />}
+      <header className="results-head simple">
+        <h1>
+          {profiled ? t.yourSelection : t.popularSelection}
+          {dish && <span className="h1-dish" key={dish}>{t.withDish(t.dishArticle[dish] || t.dish(dish).toLowerCase())}</span>}
+        </h1>
+        <p className="results-line">
+          {profiled && hasAnswers ? <SommelierNote t={t} answers={answers} /> : (profiled ? t.selectionIntro : t.popularIntro)}
+          {" "}
+          {profiled
+            ? <button className="inline-link" onClick={onQuiz}>{t.editTaste}</button>
+            : <button className="btn btn-primary" onClick={onQuiz}>{t.personalize}<ArrowRight size={18} aria-hidden="true" /></button>}
+        </p>
+        {opinions > 0 && (
+          <p className="learned">
+            <span className="learned-dot" aria-hidden="true" />
+            {t.learnedFrom(opinions).split(String(opinions))[0]}<CountUp value={opinions} />{t.learnedFrom(opinions).split(String(opinions))[1]}
+          </p>
+        )}
       </header>
 
       <div className={`dishbar ${compact ? "compact" : ""}`} role="group" aria-label={t.eatingTonight}>
@@ -1000,7 +918,6 @@ function Results({ t, options, answers, profiled, opinions, dish, onDish, wines,
           <>
             <div className="section-head">
               <h2>{t.alsoTitle}</h2>
-              <p>{t.actionsHint}</p>
             </div>
             <div className="tiles">
               {rest.map((w, k) => (
@@ -1055,103 +972,74 @@ function Actions({ t, wine: w, busy, liked, saved, onOpinion, onCellar }) {
   );
 }
 
-// key facts as a short spec sheet; a tick marks what matches the visitor's answers
-function Specs({ t, wine: w }) {
-  const m = w.matched || {};
-  const rows = [
-    [t.pColor, t.type(w.type), !!m.color],
-    [t.pBody, w.body && t.body(w.body), !!m.body],
-    [t.pAcidity, w.acidity && t.acidity(w.acidity), !!m.acidity],
-    [t.pGrapes, (m.grapes || [])[0] || (w.grapes || [])[0], (m.grapes || []).length > 0],
-    [t.pCountries, t.country(w.country), !!m.country],
-    [t.pairsWithTitle, w.pairs_with && t.dishLabel(w.pairs_with), !!w.pairs_with],
-  ].filter((r) => r[1]);
+function factLine(t, w) {
+  return [t.type(w.type), w.body && t.body(w.body), w.acidity && t.acidity(w.acidity), (w.grapes || [])[0]].filter(Boolean).join(" · ");
+}
+
+function CellarButton({ t, saved, onClick }) {
+  const label = saved ? t.inCellar : t.addToCellar;
   return (
-    <dl className="specs">
-      {rows.map(([k, v, ok]) => (
-        <div key={k} className={ok ? "ok" : ""}>
-          <dt>{k}</dt>
-          <dd>{v}{ok && <Check size={13} strokeWidth={3} aria-label={t.matchTitle} />}</dd>
-        </div>
-      ))}
-    </dl>
+    <button className={`stage-cellar ${saved ? "on" : ""}`} onClick={onClick} aria-pressed={saved} aria-label={label} title={label}>
+      {saved ? <BookmarkCheck size={18} aria-hidden="true" /> : <Bookmark size={18} aria-hidden="true" />}
+      <span className="stage-cellar-label">{label}</span>
+    </button>
   );
 }
 
-function HeroPick({ t, answers, wine: w, busy, liked, saved, onOpinion, onCellar, onOpen }) {
+function Opinion({ t, wine: w, busy, liked, onOpinion }) {
+  return (
+    <div className="tile-actions">
+      <button className={`act act-like ${liked ? "done" : ""}`} onClick={() => onOpinion(w, "like")} disabled={busy}>
+        <Heart size={16} fill={liked ? "currentColor" : "none"} aria-hidden="true" />
+        {liked ? t.liked : t.likeShort}
+      </button>
+      <button className="act act-no" onClick={() => onOpinion(w, "dislike")} disabled={busy}>
+        <X size={16} aria-hidden="true" />
+        {t.dislikeShort}
+      </button>
+    </div>
+  );
+}
+
+function HeroPick({ t, wine: w, busy, liked, saved, onOpinion, onCellar, onOpen }) {
   const reason = reasonLine(t, w);
   return (
     <article className={`hero-pick ${liked ? "liked" : ""}`} aria-labelledby={`h-${w.wine_id}`}>
-      <button className="hero-stage" style={tint(w.type)} onClick={() => onOpen(w)} aria-label={`${t.seeDetail} : ${w.name}`}>
-        <Watermark text={w.region || w.country} width={520} />
+      <div className="hero-stage" style={tint(w.type)}>
+        <button className="stage-hit" onClick={() => onOpen(w)} aria-label={`${t.seeDetail} : ${w.name}`} />
         <span className="stage-glow" aria-hidden="true" />
         <Bottle type={w.type} grapes={w.grapes} winery={w.winery} name={w.name} height={400} />
+        <CellarButton t={t} saved={saved} onClick={() => onCellar(w)} />
         {liked && <span className="liked-burst" aria-hidden="true"><Heart size={56} fill="currentColor" /></span>}
-      </button>
+      </div>
       <div className="hero-info">
-        <div className="hero-top">
-          <p className="eyebrow">{t.heroPickTitle}</p>
-          <Criteria t={t} answers={answers} wine={w} />
-        </div>
-        <h2 id={`h-${w.wine_id}`}>{w.name}</h2>
-        <p className="hero-place">{[w.winery, w.region].filter(Boolean).join(" · ")}</p>
-        {reason && <p className={`hero-why ${w.basis}`}>{reason}</p>}
-        <Specs t={t} wine={w} />
-        <Actions t={t} wine={w} busy={busy} liked={liked} saved={saved} onOpinion={onOpinion} onCellar={onCellar} />
-        <button className="btn-chevron" onClick={() => onOpen(w)}>{t.seeDetail}<ChevronRight size={16} aria-hidden="true" /></button>
+        <p className="eyebrow">{t.heroPickTitle}</p>
+        <h2 id={`h-${w.wine_id}`}><button className="tile-name-btn" onClick={() => onOpen(w)}>{w.name}</button></h2>
+        <p className="hero-place">{[w.winery, w.region, t.country(w.country)].filter(Boolean).join(" · ")}</p>
+        <p className="hero-facts">{factLine(t, w)}</p>
+        {reason && <p className="hero-why">{reason}</p>}
+        <Opinion t={t} wine={w} busy={busy} liked={liked} onOpinion={onOpinion} />
       </div>
     </article>
   );
 }
 
-function WineTile({ t, answers, k, rank, wine: w, busy, liked, saved, onOpinion, onCellar, onOpen }) {
-  // the eyebrow already says type and country: the pills only add what it does not
-  const m = w.matched || {};
-  const pills = [
-    m.body && t.body(m.body),
-    m.acidity && `${t.acidityTitle} ${t.acidity(m.acidity).toLowerCase()}`,
-    ...(m.grapes || []),
-  ].filter(Boolean).slice(0, 3);
-  const reason = reasonLine(t, w);
-  const cellarLabel = saved ? t.inCellar : t.addToCellar;
+function WineTile({ t, k, wine: w, busy, liked, saved, onOpinion, onCellar, onOpen }) {
   return (
     <article className={`tile ${busy && !liked ? "leaving" : ""} ${liked ? "liked" : ""}`} style={{ "--d": `${k * 50}ms` }} aria-labelledby={`w-${w.wine_id}`}>
       <div className="tile-stage" style={tint(w.type)}>
         <button className="stage-hit" onClick={() => onOpen(w)} aria-label={`${t.seeDetail} : ${w.name}`} />
-        <span className="tile-rank">{t.num(rank)}</span>
         <span className="stage-glow" aria-hidden="true" />
-        <Bottle type={w.type} grapes={w.grapes} winery={w.winery} name={w.name} height={210} />
-        <button className={`stage-cellar ${saved ? "on" : ""}`} onClick={() => onCellar(w)} aria-pressed={saved} aria-label={cellarLabel}>
-          {saved ? <BookmarkCheck size={18} aria-hidden="true" /> : <Bookmark size={18} aria-hidden="true" />}
-          <span className="stage-cellar-label">{cellarLabel}</span>
-        </button>
+        <Bottle type={w.type} grapes={w.grapes} winery={w.winery} name={w.name} height={200} />
+        <CellarButton t={t} saved={saved} onClick={() => onCellar(w)} />
         {liked && <span className="liked-burst" aria-hidden="true"><Heart size={42} fill="currentColor" /></span>}
       </div>
       <div className="tile-body">
-        <p className="tile-eyebrow">
-          {t.type(w.type)} · {t.country(w.country)}
-          {(m.color || m.country) && <Check size={13} strokeWidth={3} className="eyebrow-check" aria-hidden="true" />}
-        </p>
-        <h3 id={`w-${w.wine_id}`} className="tile-name">
-          <button className="tile-name-btn" onClick={() => onOpen(w)}>{w.name}</button>
-        </h3>
-        <p className="tile-place">{[w.winery, w.region].filter(Boolean).join(" · ")}</p>
-        <div className="tile-meta">
-          <Criteria t={t} answers={answers} wine={w} />
-          {pills.length > 0 && <ul className="match">{pills.map((p) => <li key={p}><Check size={12} strokeWidth={3} aria-hidden="true" />{p}</li>)}</ul>}
-          {reason && (pills.length === 0 || w.basis === "similar") && <p className={`reason ${w.basis}`}>{reason}</p>}
-        </div>
+        <h3 id={`w-${w.wine_id}`} className="tile-name"><button className="tile-name-btn" onClick={() => onOpen(w)}>{w.name}</button></h3>
+        <p className="tile-place">{[w.winery, t.country(w.country)].filter(Boolean).join(" · ")}</p>
+        <p className="tile-facts">{factLine(t, w)}</p>
       </div>
-      <div className="tile-actions">
-        <button className={`act act-like ${liked ? "done" : ""}`} onClick={() => onOpinion(w, "like")} disabled={busy}>
-          <Heart size={16} fill={liked ? "currentColor" : "none"} aria-hidden="true" />
-          {liked ? t.liked : t.likeShort}
-        </button>
-        <button className="act act-no" onClick={() => onOpinion(w, "dislike")} disabled={busy}>
-          <X size={16} aria-hidden="true" />
-          {t.dislikeShort}
-        </button>
-      </div>
+      <Opinion t={t} wine={w} busy={busy} liked={liked} onOpinion={onOpinion} />
     </article>
   );
 }
@@ -1178,7 +1066,6 @@ function Detail({ t, answers, wine: w, saved, busy, onClose, onOpinion, onCellar
       <div className="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title" onClick={(e) => e.stopPropagation()}>
         <button ref={closeRef} className="sheet-close" onClick={onClose} aria-label={t.close}><X size={18} aria-hidden="true" /></button>
         <div className="sheet-stage" style={tint(w.type)}>
-          <Watermark text={w.region || w.country} width={370} />
           <span className="stage-glow" aria-hidden="true" />
           <Bottle type={w.type} grapes={w.grapes} winery={w.winery} name={w.name} height={400} />
         </div>
@@ -1219,15 +1106,15 @@ function Detail({ t, answers, wine: w, saved, busy, onClose, onOpinion, onCellar
 function CellarPage({ t, tab, onTab, cellar, liked, suggestions, answers, busy, inCellar, onCellar, onOpinion, onOpen, onBack, onQuiz }) {
   const list = tab === "cellar" ? cellar : liked;
   const shownIds = new Set(list.map((w) => w.wine_id));
-  const ideas = suggestions.filter((w) => !shownIds.has(w.wine_id) && !inCellar(w)).slice(0, 4);
+  // the ideas are frozen while the page is open: a like or an add removes one card,
+  // the next one takes its place, and nothing else moves (the selection refresh is ignored here)
+  const [pool, setPool] = useState(() => suggestions.slice(0, 16));
+  useEffect(() => { if (pool.length === 0 && suggestions.length) setPool(suggestions.slice(0, 16)); }, [suggestions, pool.length]);
+  const ideas = pool.filter((w) => !shownIds.has(w.wine_id) && !inCellar(w)).slice(0, 4);
   const hasAnswers = Object.values(answers).some((v) => (Array.isArray(v) ? v.length : v));
   return (
     <section className="cellar">
       <header className="cellar-head">
-        <button className="btn-back" onClick={onBack}>
-          <ArrowLeft size={16} aria-hidden="true" />
-          {t.backToSelection}
-        </button>
         <h1>{tab === "cellar" ? t.cellarHero : t.favorites}</h1>
         <p className="results-sub">{tab === "cellar" ? t.cellarCount(cellar.length) : t.selectionCount(liked.length)}</p>
         <div className="segmented" role="tablist">
@@ -1273,7 +1160,7 @@ function CellarPage({ t, tab, onTab, cellar, liked, suggestions, answers, busy, 
             </div>
             <div className="ideas-row">
               {ideas.map((w, k) => (
-                <div key={w.wine_id} className="idea" style={{ "--d": `${k * 60}ms` }}>
+                <div key={w.wine_id} className="idea">
                   <button className="idea-stage" style={tint(w.type)} onClick={() => onOpen(w)} aria-label={`${t.seeDetail} : ${w.name}`}>
                     <Bottle type={w.type} grapes={w.grapes} winery={w.winery} name={w.name} height={170} reflection={false} />
                   </button>

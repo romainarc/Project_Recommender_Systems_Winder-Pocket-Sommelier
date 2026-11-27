@@ -617,3 +617,26 @@ body { letter-spacing: -0.005em; }
 .wordmark em { font-style: normal; font-weight: 500; }
 .nb-title { font-family: var(--sans); }
 .nb-card { margin-top: 28px; }
+
+/* ------------------------------------------------ round 11: a calmer selection page */
+.results-head.simple { display: grid; grid-template-columns: 1fr; gap: 12px; align-items: start; justify-items: start; padding: clamp(28px, 5vh, 48px) 24px 22px; animation: rise 0.45s var(--spring) both; }
+.results-head.simple h1 { max-width: 20ch; }
+.results-line { color: var(--muted); font-size: 1.02rem; line-height: 1.55; max-width: 62ch; margin: 0; }
+.inline-link { border: 0; background: none; padding: 0; cursor: pointer; color: var(--brand); font: inherit; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; text-decoration-thickness: 1px; min-height: 0; }
+.inline-link:hover { text-decoration-thickness: 2px; }
+.hero-stage { cursor: default; overflow: hidden; }
+.hero-stage .bottle { pointer-events: none; }
+.hero-info { gap: 10px; }
+.hero-info h2 .tile-name-btn { font: inherit; letter-spacing: inherit; text-align: left; }
+.hero-facts, .tile-facts { color: var(--ink-2); font-size: 0.92rem; font-weight: 500; }
+.tile-facts { font-size: 0.82rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hero-why { color: var(--muted); margin: 2px 0 6px; max-width: 46ch; }
+.hero-info .tile-actions { padding: 0; width: min(100%, 360px); }
+.hero-info .act { height: 46px; font-size: 0.92rem; }
+.hero-info .act-no svg { display: inline; }
+.tile-body { gap: 4px; padding: 16px 16px 4px; }
+.tile-place { margin-bottom: 0; }
+/* cellar ideas: a single soft fade when a card arrives, no staggered replay */
+.idea { animation: fade 0.3s var(--ease) both; }
+.nav-text { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 6px; font-size: 0.86rem; color: var(--muted); }
+.nav-text:hover { color: var(--brand); }
