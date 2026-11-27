@@ -2,7 +2,7 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react"
 import {
   ArrowLeft, ArrowRight, Beef, Bookmark, BookmarkCheck, CakeSlice, Check, ChevronRight, Croissant, Drumstick, Fish, Flame, Ham, Heart, Milk, Pizza, Plus, RotateCcw, Salad, Search, Shell, SlidersHorizontal, UtensilsCrossed, X,
 } from "lucide-react";
-import Bottle, { Glass, Wave } from "./Bottle.jsx";
+import Bottle, { Glass, LabelLang, Wave } from "./Bottle.jsx";
 import { GRAPE_PATH } from "./grapePath.js";
 import { api, newUserId } from "./api.js";
 import { makeT, POPULAR_COUNTRIES, WHITE_GRAPES } from "./i18n.js";
@@ -117,11 +117,35 @@ function CountUp({ value }) {
 }
 
 /* ------------------------------------------------------------------ app */
+const ROUTES = { welcome: "", quiz: "#/quiz", results: "#/selection", cellar: "#/cave" };
+const screenFromHash = () => Object.keys(ROUTES).find((k) => ROUTES[k] && ROUTES[k] === window.location.hash) || null;
+
 export default function App() {
   const saved = useMemo(() => load(SESSION_KEY, null), []);
   const [lang, setLang] = useState(() => load("ps-lang", "fr"));
   const t = useMemo(() => makeT(lang), [lang]);
-  const [screen, setScreen] = useState(saved?.profiled ? "results" : "welcome");
+  const [screen, setScreen] = useState(() => {
+    const fromUrl = screenFromHash();
+    if (fromUrl && (fromUrl !== "results" && fromUrl !== "cellar" || saved?.profiled)) return fromUrl;
+    return saved?.profiled ? "results" : "welcome";
+  });
+  const fromHistory = useRef(false);
+  useEffect(() => {
+    const url = ROUTES[screen] || window.location.pathname;
+    if (fromHistory.current) fromHistory.current = false;
+    else if ((ROUTES[screen] || "") !== window.location.hash) window.history.pushState(null, "", url);
+    window.scrollTo(0, 0);
+  }, [screen]);
+  useEffect(() => {
+    const onPop = () => {
+      const s = screenFromHash() || (window.location.hash ? null : "welcome");
+      if (!s) return;
+      fromHistory.current = true;
+      setScreen(s);
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
   const [options, setOptions] = useState(null);
   const [error, setError] = useState(null);
   const [userId, setUserId] = useState(() => saved?.userId || newUserId());
@@ -190,10 +214,10 @@ export default function App() {
     boot();
   }, [boot]);
 
-  const showToast = (text, kind = "ok") => {
-    setToast({ text, kind });
+  const showToast = (text, kind = "ok", undo = null) => {
+    setToast({ text, kind, undo, id: Date.now() });
     clearTimeout(toastTimer.current);
-    toastTimer.current = setTimeout(() => setToast(null), 2200);
+    toastTimer.current = setTimeout(() => setToast(null), undo ? 4500 : 3200);
   };
 
   const finishQuiz = async (final) => {
@@ -251,8 +275,9 @@ export default function App() {
   // cellar: the wine stays in place; a second click takes it out
   const toggleCellar = (wine) => {
     if (cellar.some((w) => w.wine_id === wine.wine_id)) {
+      const before = cellar;
       setCellar((c) => c.filter((w) => w.wine_id !== wine.wine_id));
-      showToast(t.removedFromCellar, "info");
+      showToast(t.removedFromCellar, "info", () => { setCellar(before); setToast(null); });
       return;
     }
     setCellar((c) => [...c, wine]);
@@ -292,6 +317,7 @@ export default function App() {
   const inCellar = (w) => cellar.some((c) => c.wine_id === w.wine_id);
 
   return (
+    <LabelLang.Provider value={t.type}>
     <div className={`app screen-${screen}`}>
       <a className="skip-link" href="#main">{lang === "fr" ? "Aller au contenu" : "Skip to content"}</a>
       <Nav
@@ -368,17 +394,19 @@ export default function App() {
         />
       )}
       {composing && <Composing t={t} />}
-      <div className={`toast ${toast ? "show" : ""}`} role="status" aria-live="polite">
+      <div className={`toast ${toast ? "show" : ""} ${toast?.undo ? "has-undo" : ""}`} role="status" aria-live="polite">
         {toast && (
           <>
             <span className={`toast-icon ${toast.kind}`} aria-hidden="true">
               {toast.kind === "like" ? <Heart size={14} fill="currentColor" /> : toast.kind === "cellar" ? <BookmarkCheck size={14} /> : toast.kind === "info" ? <X size={14} /> : <Check size={14} />}
             </span>
             <span>{toast.text}</span>
+            {toast.undo && <button className="toast-undo" onClick={toast.undo}>{t.undo}</button>}
           </>
         )}
       </div>
     </div>
+    </LabelLang.Provider>
   );
 }
 

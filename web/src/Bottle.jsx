@@ -1,4 +1,7 @@
-import { useId } from "react";
+import { createContext, useContext, useId } from "react";
+
+// lets the app print the wine type on labels in the visitor's language
+export const LabelLang = createContext((type) => type);
 
 // Product-style bottle renderings, drawn in SVG (offline, no image rights).
 // The silhouette follows the wine (Bordeaux, Burgundy, Alsace flute, Champagne, half bottle),
@@ -63,6 +66,7 @@ function fit(text, width, base, min, charW, spacing = 0) {
 
 export default function Bottle({ type = "Red", grapes = [], winery, name, height = 260, reflection = true, label = true }) {
   const id = useId().replace(/:/g, "");
+  const typeName = useContext(LabelLang);
   const c = bottleColors(type);
   const shape = bottleShape(type, grapes);
   const d = SHAPES[shape];
@@ -144,7 +148,7 @@ export default function Bottle({ type = "Red", grapes = [], winery, name, height
                 {main.text}
               </text>
               <text x="60" y={labelTop + 76} textAnchor="middle" fill={c.ink} fontSize="5.5" letterSpacing="1.6" opacity="0.75" fontFamily="Helvetica, Arial, sans-serif">
-                {(type || "").toUpperCase()}
+                {(typeName(type) || "").toUpperCase()}
               </text>
             </g>
           )}
