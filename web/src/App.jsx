@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import {
-  ArrowLeft, ArrowRight, Beef, Bookmark, BookmarkCheck, CakeSlice, Check, ChevronRight, Croissant,
-  Drumstick, Fish, Flame, Ham, Heart, Milk, Pizza, Plus, Salad, Search, Shell, UtensilsCrossed, X,
+  ArrowLeft, ArrowRight, Beef, Bookmark, BookmarkCheck, CakeSlice, Check, ChevronRight, Croissant, Drumstick, Fish, Flame, Ham, Heart, Milk, Pizza, Plus, RotateCcw, Salad, Search, Shell, SlidersHorizontal, UtensilsCrossed, X,
 } from "lucide-react";
 import Bottle, { Glass, Wave } from "./Bottle.jsx";
 import { api, newUserId } from "./api.js";
@@ -84,21 +83,27 @@ function save(key, value) {
 // The mark: a fine-line wine glass that fills with wine when the page opens.
 export function LogoMark({ size = 30, animate = true }) {
   const uid = useId().replace(/:/g, "");
+  const drop = "M16 11.6c2.5 3.2 3.8 5.4 3.8 7.1a3.8 3.8 0 0 1-7.6 0c0-1.7 1.3-3.9 3.8-7.1z";
   return (
     <svg viewBox="0 0 32 32" width={size} height={size} aria-hidden="true" className={`logo-mark ${animate ? "fill-anim" : ""}`}>
       <defs>
-        <clipPath id={`bowl${uid}`}>
-          <path d="M9.6 4.5h12.8c.6 5.6.2 10.9-6.4 11.9C9.4 15.4 9 10.1 9.6 4.5z" />
-        </clipPath>
+        <linearGradient id={`lg${uid}`} x1="0" y1="0" x2="0.4" y2="1">
+          <stop offset="0" stopColor="#962b45" />
+          <stop offset="1" stopColor="#5a1222" />
+        </linearGradient>
+        <clipPath id={`drop${uid}`}><path d={drop} /></clipPath>
       </defs>
-      <rect width="32" height="32" rx="9" fill="var(--logo-bg, #7a1f33)" />
-      <g clipPath={`url(#bowl${uid})`}>
+      <rect width="32" height="32" rx="9" fill={`url(#lg${uid})`} />
+      {/* the pocket */}
+      <path d="M7.5 6.5h17v12.2c0 1.1-.6 2.1-1.5 2.6L16 25.6l-7-4.3c-.9-.5-1.5-1.5-1.5-2.6z" fill="#fff" />
+      <path d="M9.6 9.4h12.8" stroke="#7a1f33" strokeOpacity="0.45" strokeWidth="0.8" strokeDasharray="1.3 1.1" strokeLinecap="round" />
+      {/* the wine drop, filling up */}
+      <path d={drop} fill="#7a1f33" opacity="0.16" />
+      <g clipPath={`url(#drop${uid})`}>
         <g className="logo-liquid">
-          <path d="M2 10.5c3-1.4 5 1.4 8 0s5-1.4 8 0 5 1.4 8 0 5-1.4 8 0V20H2z" fill="#e7b9c2" />
+          <path d="M4 15.4c2-1 4 1 6 0s4-1 6 0 4 1 6 0 4-1 6 0 4 1 6 0V26H4z" fill="#7a1f33" />
         </g>
       </g>
-      <path d="M9.6 4.5h12.8c.6 5.6.2 10.9-6.4 11.9C9.4 15.4 9 10.1 9.6 4.5z" fill="none" stroke="#fff" strokeWidth="1.4" strokeLinejoin="round" />
-      <path d="M16 16.4v7.6M11.6 26.2h8.8" stroke="#fff" strokeWidth="1.4" strokeLinecap="round" />
     </svg>
   );
 }
@@ -106,7 +111,7 @@ export function LogoMark({ size = 30, animate = true }) {
 function Wordmark() {
   return (
     <span className="wordmark">
-      Pocket<span className="wm-thin">Sommelier</span>
+      Pocket <em>Sommelier</em>
     </span>
   );
 }
@@ -206,7 +211,7 @@ export default function App() {
   const showToast = (text, kind = "ok") => {
     setToast({ text, kind });
     clearTimeout(toastTimer.current);
-    toastTimer.current = setTimeout(() => setToast(null), 3200);
+    toastTimer.current = setTimeout(() => setToast(null), 2200);
   };
 
   const finishQuiz = async (final) => {
@@ -240,7 +245,7 @@ export default function App() {
     if (event === "like") {
       setJustLiked(wine.wine_id);
       setLiked((l) => (l.some((w) => w.wine_id === wine.wine_id) ? l : [wine, ...l]));
-      showToast(t.likedToast(wine.name), "like");
+      showToast(t.likedToast, "like");
     } else {
       showToast(t.dislikedToast, "info");
     }
@@ -265,12 +270,12 @@ export default function App() {
   const toggleCellar = (wine) => {
     if (cellar.some((w) => w.wine_id === wine.wine_id)) {
       setCellar((c) => c.filter((w) => w.wine_id !== wine.wine_id));
-      showToast(t.removedFromCellar(wine.name), "info");
+      showToast(t.removedFromCellar, "info");
       return;
     }
     setCellar((c) => [...c, wine]);
     setBump((b) => b + 1);
-    showToast(t.savedToast(wine.name), "cellar");
+    showToast(t.savedToast, "cellar");
     api.log({ user_id: userId, wine_id: wine.wine_id, event_type: "add_to_cellar", dish }).catch(() => {});
   };
 
@@ -314,7 +319,11 @@ export default function App() {
         bump={bump}
         onGo={go}
         onHome={() => setScreen("welcome")}
+        answers={answers}
+        profiled={profiled}
+        opinions={opinions}
         onLang={() => setLang((l) => (l === "fr" ? "en" : "fr"))}
+        onQuiz={() => setScreen("quiz")}
         onNewVisitor={newVisitor}
       />
       <main id="main" key={screen} className="page">
@@ -381,7 +390,7 @@ export default function App() {
         {toast && (
           <>
             <span className={`toast-icon ${toast.kind}`} aria-hidden="true">
-              {toast.kind === "like" ? <Heart size={14} fill="currentColor" /> : toast.kind === "cellar" ? <BookmarkCheck size={14} /> : <Check size={14} />}
+              {toast.kind === "like" ? <Heart size={14} fill="currentColor" /> : toast.kind === "cellar" ? <BookmarkCheck size={14} /> : toast.kind === "info" ? <X size={14} /> : <Check size={14} />}
             </span>
             <span>{toast.text}</span>
           </>
@@ -392,29 +401,68 @@ export default function App() {
 }
 
 /* ------------------------------------------------------------------ navigation, footer */
-function Nav({ t, screen, cellarCount, bump, onGo, onHome, onLang, onNewVisitor }) {
+function Nav({ t, screen, cellarCount, bump, answers, profiled, opinions, onGo, onHome, onLang, onQuiz, onNewVisitor }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e) => { if (!ref.current?.contains(e.target)) setOpen(false); };
+    const esc = (e) => e.key === "Escape" && setOpen(false);
+    document.addEventListener("pointerdown", close);
+    document.addEventListener("keydown", esc);
+    return () => { document.removeEventListener("pointerdown", close); document.removeEventListener("keydown", esc); };
+  }, [open]);
+  const summary = [answers.color && t.type(answers.color), answers.body && t.body(answers.body), answers.acidity && t.acidity(answers.acidity)].filter(Boolean);
+  const level = [0.3, 0.42, 0.55, 0.7, 0.82][BODY_ORDER.indexOf(answers.body)] ?? 0.5;
+  const glass = <Glass level={profiled ? level : 0.12} tint={TYPE_DOT[answers.color] || "#b9a9ac"} height={26} />;
+  const onSel = screen === "results";
+  const onCel = screen === "cellar";
+  const go = (fn) => () => { setOpen(false); fn(); };
   return (
     <header className="nav">
       <div className="nav-inner">
         <button className="brand" onClick={onHome} aria-label={t.brand}>
-          <LogoMark size={28} />
+          <LogoMark size={30} />
           <Wordmark />
         </button>
-        <nav className="nav-links" aria-label="Pocket Sommelier">
-          <button className={`nav-link ${screen === "results" ? "active" : ""}`} onClick={() => onGo("results")}>
+        <nav className={`seg ${onCel ? "right" : onSel ? "left" : "none"}`} aria-label="Pocket Sommelier">
+          <span className="seg-thumb" aria-hidden="true" />
+          <button className={`seg-btn ${onSel ? "active" : ""}`} onClick={() => onGo("results")} aria-current={onSel ? "page" : undefined}>
             {t.navSelection}
           </button>
-          <button className={`nav-link ${screen === "cellar" ? "active" : ""}`} onClick={() => onGo("cellar", "cellar")}>
+          <button className={`seg-btn ${onCel ? "active" : ""}`} onClick={() => onGo("cellar", "cellar")} aria-current={onCel ? "page" : undefined}>
             {t.navCellar}
             {cellarCount > 0 && <span key={bump} className="nav-count bump">{cellarCount}</span>}
           </button>
         </nav>
-        <div className="nav-right">
-          <button className="nav-text" onClick={onNewVisitor}>{t.newVisitor}</button>
+        <div className="nav-right" ref={ref}>
           <button className="lang" onClick={onLang} aria-label={t.switchLang}>
             <span className={t.lang === "fr" ? "on" : ""}>FR</span>
             <span className={t.lang === "en" ? "on" : ""}>EN</span>
           </button>
+          <button className={`palate ${open ? "open" : ""}`} onClick={() => setOpen((o) => !o)} aria-expanded={open} aria-haspopup="menu">
+            <span className="palate-glass">{glass}</span>
+            <span className="palate-text">
+              <span className="palate-kicker">{t.palate}</span>
+              <span className="palate-value">{profiled && summary.length ? summary.slice(0, 2).join(" · ") : t.palateEmpty}</span>
+            </span>
+            <ChevronRight size={15} className="palate-chev" aria-hidden="true" />
+          </button>
+          {open && (
+            <div className="palate-menu" role="menu">
+              <div className="pm-head">
+                <span className="pm-glass">{glass}</span>
+                <div>
+                  <p className="pm-title">{profiled && summary.length ? summary.join(" · ") : t.palateEmpty}</p>
+                  <p className="pm-sub">{opinions > 0 ? t.learnedFrom(opinions) : t.palateHint}</p>
+                </div>
+              </div>
+              <button role="menuitem" className="pm-item" onClick={go(onQuiz)}><SlidersHorizontal size={16} aria-hidden="true" />{t.editTaste}</button>
+              <button role="menuitem" className="pm-item" onClick={go(() => onGo("cellar", "cellar"))}><Bookmark size={16} aria-hidden="true" />{t.navCellar}{cellarCount > 0 && <span className="pm-count">{cellarCount}</span>}</button>
+              <div className="pm-sep" />
+              <button role="menuitem" className="pm-item quiet" onClick={go(onNewVisitor)}><RotateCcw size={16} aria-hidden="true" />{t.newVisitor}</button>
+            </div>
+          )}
         </div>
       </div>
     </header>
@@ -885,30 +933,50 @@ function DishButton({ active, onClick, icon: Icon, label }) {
   );
 }
 
-function Actions({ t, wine: w, busy, liked, saved, onOpinion, onCellar, large }) {
+function Actions({ t, wine: w, busy, liked, saved, onOpinion, onCellar }) {
   return (
-    <div className={`actions ${large ? "large" : ""}`}>
-      <button className={`pill pill-like ${liked ? "done" : ""}`} onClick={() => onOpinion(w, "like")} disabled={busy}>
+    <div className="actions-row">
+      <button className={`act act-like ${liked ? "done" : ""}`} onClick={() => onOpinion(w, "like")} disabled={busy}>
         <Heart size={17} fill={liked ? "currentColor" : "none"} aria-hidden="true" />
         {liked ? t.liked : t.likeShort}
       </button>
-      <button className="pill" onClick={() => onOpinion(w, "dislike")} disabled={busy} aria-label={t.dislikeShort} title={t.dislikeShort}>
+      <button className="act act-no" onClick={() => onOpinion(w, "dislike")} disabled={busy}>
         <X size={17} aria-hidden="true" />
-        {large && t.dislikeShort}
+        {t.dislikeShort}
       </button>
-      <button className={`pill pill-cellar ${saved ? "on" : ""}`} onClick={() => onCellar(w)} aria-pressed={saved} aria-label={saved ? t.inCellar : t.addToCellar} title={saved ? t.inCellar : t.addToCellar}>
+      <button className={`act act-cellar ${saved ? "on" : ""}`} onClick={() => onCellar(w)} aria-pressed={saved}>
         {saved ? <BookmarkCheck size={17} aria-hidden="true" /> : <Bookmark size={17} aria-hidden="true" />}
-        {large && (saved ? t.inCellar : t.addToCellar)}
+        {saved ? t.inCellar : t.addToCellar}
       </button>
     </div>
   );
 }
 
+// key facts as a short spec sheet; a tick marks what matches the visitor's answers
+function Specs({ t, wine: w }) {
+  const m = w.matched || {};
+  const rows = [
+    [t.pColor, t.type(w.type), !!m.color],
+    [t.pBody, w.body && t.body(w.body), !!m.body],
+    [t.pAcidity, w.acidity && t.acidity(w.acidity), !!m.acidity],
+    [t.pGrapes, (m.grapes || [])[0] || (w.grapes || [])[0], (m.grapes || []).length > 0],
+    [t.pCountries, t.country(w.country), !!m.country],
+    [t.pairsWithTitle, w.pairs_with && t.dishLabel(w.pairs_with), !!w.pairs_with],
+  ].filter((r) => r[1]);
+  return (
+    <dl className="specs">
+      {rows.map(([k, v, ok]) => (
+        <div key={k} className={ok ? "ok" : ""}>
+          <dt>{k}</dt>
+          <dd>{v}{ok && <Check size={13} strokeWidth={3} aria-label={t.matchTitle} />}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
 function HeroPick({ t, answers, wine: w, busy, liked, saved, onOpinion, onCellar, onOpen }) {
-  const pills = matchPills(t, w);
   const reason = reasonLine(t, w);
-  const bodyIdx = BODY_ORDER.indexOf(w.body) + 1;
-  const acidIdx = ACIDITY_ORDER.indexOf(w.acidity) + 1;
   return (
     <article className={`hero-pick ${liked ? "liked" : ""}`} aria-labelledby={`h-${w.wine_id}`}>
       <button className="hero-stage" style={tint(w.type)} onClick={() => onOpen(w)} aria-label={`${t.seeDetail} : ${w.name}`}>
@@ -923,19 +991,10 @@ function HeroPick({ t, answers, wine: w, busy, liked, saved, onOpinion, onCellar
           <Criteria t={t} answers={answers} wine={w} />
         </div>
         <h2 id={`h-${w.wine_id}`}>{w.name}</h2>
-        <p className="hero-place">{[w.winery, w.region, t.country(w.country)].filter(Boolean).join(" · ")}</p>
-        {pills.length > 0 && (
-          <ul className="match" aria-label={t.matchTitle}>
-            {pills.map((p) => <li key={p}><Check size={13} strokeWidth={3} aria-hidden="true" />{p}</li>)}
-          </ul>
-        )}
-        {reason && <p className={`reason ${w.basis}`}>{reason}</p>}
-        <div className="hero-scales">
-          {bodyIdx > 0 && <div><span className="profile-label">{t.pBody}</span><Scale value={bodyIdx} max={5} left={t.light} right={t.full} label={t.body(w.body)} /></div>}
-          {acidIdx > 0 && <div><span className="profile-label">{t.pAcidity}</span><Scale value={acidIdx} max={3} left={t.soft} right={t.crisp} label={t.acidity(w.acidity)} /></div>}
-        </div>
-        {w.pairs_with && <p className="pairs">{t.why.pairs(t.dishLabel(w.pairs_with))}</p>}
-        <Actions t={t} wine={w} busy={busy} liked={liked} saved={saved} onOpinion={onOpinion} onCellar={onCellar} large />
+        <p className="hero-place">{[w.winery, w.region].filter(Boolean).join(" · ")}</p>
+        {reason && <p className={`hero-why ${w.basis}`}>{reason}</p>}
+        <Specs t={t} wine={w} />
+        <Actions t={t} wine={w} busy={busy} liked={liked} saved={saved} onOpinion={onOpinion} onCellar={onCellar} />
         <button className="btn-chevron" onClick={() => onOpen(w)}>{t.seeDetail}<ChevronRight size={16} aria-hidden="true" /></button>
       </div>
     </article>
@@ -1046,7 +1105,7 @@ function Detail({ t, answers, wine: w, saved, busy, onClose, onOpinion, onCellar
               <p className="sheet-line">{w.dishes.slice(0, 5).map((d) => t.dishLabel(d)).join(", ")}</p>
             </div>
           )}
-          <Actions t={t} wine={w} busy={busy} liked={false} saved={saved} onOpinion={onOpinion} onCellar={onCellar} large />
+          <Actions t={t} wine={w} busy={busy} liked={false} saved={saved} onOpinion={onOpinion} onCellar={onCellar} />
         </div>
       </div>
     </div>
