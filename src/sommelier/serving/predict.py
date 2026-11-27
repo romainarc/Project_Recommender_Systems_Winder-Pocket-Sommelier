@@ -19,6 +19,31 @@ from sommelier.models.baselines import dish_wines_mask, questionnaire_bonus, win
 # Weight of the questionnaire bonus at serving time (see questionnaire_bonus). Chosen on the
 # VALIDATION split with scripts/tune_bonus.py; override with the QUESTIONNAIRE_WEIGHT variable.
 DEFAULT_QUESTIONNAIRE_WEIGHT = 0.5
+
+# A recommended wine is explained by a liked wine when their learned representations are
+# at least this close (cosine similarity).
+LIKE_SIMILARITY = 0.9          # about the top 1 % of random wine pairs (0.83)
+MAX_SIMILAR_REASONS = 3
+
+# X-Wines has 60 dish labels, many with only a few wines ("Fish": 54, "Paella": 1) next to
+# big ones ("Rich Fish": 5,699). The app offers these families; a family matches a wine
+# when any of its labels is in the wine's Harmonize list.
+DISH_FAMILIES = {
+    "Red meat": ["Beef", "Lamb", "Veal", "Game Meat", "Meat", "Barbecue", "Grilled"],
+    "Poultry": ["Poultry", "Chicken", "Duck", "Curry Chicken", "Light Stews"],
+    "Pork & charcuterie": ["Pork", "Cured Meat"],
+    "Fish": ["Fish", "Lean Fish", "Rich Fish", "Codfish", "Sushi", "Sashimi"],
+    "Seafood": ["Shellfish", "Seafood", "Paella"],
+    "Pasta & pizza": ["Pasta", "Pizza", "Lasagna", "Tagliatelle", "Risotto", "Tomato Dishes",
+                      "Eggplant Parmigiana", "Yakissoba"],
+    "Vegetarian": ["Vegetarian", "Mushrooms", "Salad", "Baked Potato"],
+    "Cheese": ["Soft Cheese", "Maturated Cheese", "Hard Cheese", "Goat Cheese", "Blue Cheese",
+               "Mild Cheese", "Cheese", "Medium-cured Cheese"],
+    "Spicy food": ["Spicy Food"],
+    "Aperitif & snacks": ["Appetizer", "Snack", "Aperitif", "French Fries", "Soufflé"],
+    "Dessert": ["Sweet Dessert", "Fruit Dessert", "Dessert", "Fruit", "Cake", "Chocolate",
+                "Cookies", "Citric Dessert", "Dried Fruits", "Chestnut", "Cream"],
+}
 from sommelier.models.hgib import HGIBKGAT
 
 
@@ -75,7 +100,7 @@ def with_guest_slots(ckg, n_guests):
 class Recommender:
     """Recommendations for X-Wines users and for new app users (guests)."""
 
-    def __init__(self, model_dir, data_dir, n_guests=200, questionnaire_weight=None):
+    def __init__(self, model_dir, data_dir, n_guests=1000, questionnaire_weight=None):
         if questionnaire_weight is None:
             questionnaire_weight = float(os.environ.get("QUESTIONNAIRE_WEIGHT",
                                                         DEFAULT_QUESTIONNAIRE_WEIGHT))
@@ -168,12 +193,26 @@ class Recommender:
             return None, set()
         return u, set(self.ds.train_seen.get(u, set()))
 
+    def _dish_mask(self, dish):
+        """Wines that pair with a dish family (e.g. "Fish" = Fish, Lean Fish, Rich Fish...)
+        or with one raw X-Wines dish label."""
+        if dish not in self.dish_masks:
+            labels = DISH_FAMILIES.get(dish, [dish])
+            mask = np.zeros(self.ckg.n_wines, dtype=bool)
+            for label in labels:
+                mask |= dish_wines_mask(label, self.attrs)
+            self.dish_masks[dish] = mask
+        return self.dish_masks[dish]
+
     def recommend(self, user_id, dish=None, k=10):
         """Top-k wines: model score, wines listed for the dish first, seen wines removed."""
         node, seen = self._user_node(user_id)
         wines = self.Z[self.ckg.n_users:self.ckg.n_users + self.ckg.n_wines]
-        answers = self.guests.get(user_id, {}).get("answers") or self._answers_of(node)
-        if node is None:                      # unknown user, no questionnaire: popularity
+        guest = self.guests.get(user_id, {})
+        answers = guest.get("answers") or self._answers_of(node)
+        has_profile = node is not None and (node < self.n_real or bool(guest.get("answers"))
+                                            or bool(guest.get("liked")))
+        if not has_profile:                   # no questionnaire, no like yet: popularity
             scores = self.popularity.astype(float)
         else:
             with torch.no_grad():
@@ -181,13 +220,29 @@ class Recommender:
             # make the explicit answers count: a "red, full-bodied" user gets reds first
             scores = questionnaire_bonus(scores, answers, self.attrs, self.questionnaire_weight)
         if dish:
-            if dish not in self.dish_masks:
-                self.dish_masks[dish] = dish_wines_mask(dish, self.attrs)
-            scores = scores + self.dish_masks[dish] * 1e6
+            scores = scores + self._dish_mask(dish) * 1e6
         for w in seen:
             scores[w] = -np.inf
         top = np.argsort(-scores)[:k]
-        return [self.describe(int(w), dish, answers) for w in top]
+        liked = guest.get("liked", [])
+        # "close to the wine you liked" on the few closest wines only, so the taste reasons
+        # stay visible on the others
+        closest = [(self._closest_liked(int(w), liked), int(w)) for w in top]
+        ranked = sorted((c for c in closest if c[0][0] is not None), key=lambda c: -c[0][1])
+        keep = {w for _, w in ranked[:MAX_SIMILAR_REASONS]}
+        return [self.describe(w, dish, answers, close=c[0] if w in keep else None,
+                              personal=has_profile) for c, w in closest]
+
+    def _closest_liked(self, w, liked):
+        """(liked wine closest to wine w, cosine) when close enough, else (None, 0)."""
+        if not liked:
+            return None, 0.0
+        n_u = self.ckg.n_users
+        z = self.Z[n_u + w]
+        L = self.Z[[n_u + x for x in liked]]
+        sims = torch.nn.functional.cosine_similarity(L, z.unsqueeze(0)).numpy()
+        best = int(np.argmax(sims))
+        return (liked[best], float(sims[best])) if sims[best] >= LIKE_SIMILARITY else (None, 0.0)
 
     def _answers_of(self, node):
         if self.ds.questionnaires is None or node is None or node >= self.n_real:
@@ -200,8 +255,9 @@ class Recommender:
                     self._answers_by_node[u] = row
         return self._answers_by_node.get(node, {})
 
-    def describe(self, w, dish=None, answers=None):
-        """Wine card + a short reason built from what it shares with the user's answers."""
+    def describe(self, w, dish=None, answers=None, close=None, personal=True):
+        """Wine card + a short reason built from what it shares with the user's answers,
+        the wines they liked, and the dish. The reason only says what is true."""
         wine_id = self.local_to_wine_id[w]
         row = self.wines.loc[wine_id]
         grapes = list(row["Grapes"])
@@ -211,20 +267,56 @@ class Recommender:
             reasons.append(row["Type"].lower())
         if isinstance(answers.get("body"), str) and row["Body"] == answers["body"]:
             reasons.append(row["Body"].lower())
+        if isinstance(answers.get("acidity"), str) and row["Acidity"] == answers["acidity"]:
+            reasons.append(f"{row['Acidity'].lower()} acidity")
         liked_grapes = set(answers.get("grapes") if answers.get("grapes") is not None else [])
         common = [g for g in grapes if g in liked_grapes]
         if common:
             reasons.append(", ".join(common))
         liked_countries = set(answers.get("countries") if answers.get("countries") is not None else [])
         if row["Country"] in liked_countries:
-            reasons.append(row["Country"])
-        why = "matches your taste: " + ", ".join(reasons) if reasons else "liked by people with a taste close to yours"
-        if dish and dish in list(row["Harmonize"]):
-            why += f"; pairs with {dish}"
+            reasons.append(f"from {row['Country']}")
+        if close is not None:
+            why = f"Similar to {self.wines.loc[self.local_to_wine_id[close], 'WineName']}, which you liked"
+        elif reasons:
+            why = "Matches your taste: " + ", ".join(reasons)
+        elif personal:
+            why = "Chosen for you from what people with a similar taste enjoy"
+        else:
+            why = "Popular with wine lovers"
+        pairs = None
+        if dish:
+            labels = DISH_FAMILIES.get(dish, [dish])
+            pairs = next((d for d in row["Harmonize"] if d in labels), None)
+            if pairs:
+                why += f". Pairs with {pairs.lower()}"
         rank = int((self.popularity > self.popularity[w]).sum()) + 1
+        abv = row.get("ABV")
+        # the same reasons as data, so the app can write them in any language
+        matched = {}
+        if isinstance(answers.get("color"), str) and row["Type"] == answers["color"]:
+            matched["color"] = row["Type"]
+        if isinstance(answers.get("body"), str) and row["Body"] == answers["body"]:
+            matched["body"] = row["Body"]
+        if isinstance(answers.get("acidity"), str) and row["Acidity"] == answers["acidity"]:
+            matched["acidity"] = row["Acidity"]
+        if common:
+            matched["grapes"] = common
+        if row["Country"] in liked_countries:
+            matched["country"] = row["Country"]
+        basis = ("similar" if close is not None else "taste" if reasons
+                 else "personal" if personal else "popular")
         return {"wine_id": int(wine_id), "name": row["WineName"], "type": row["Type"],
-                "body": row["Body"], "grapes": grapes, "country": row["Country"],
-                "popularity_rank": rank, "explanation": why}
+                "body": row["Body"], "acidity": row.get("Acidity"), "grapes": grapes,
+                "country": row["Country"], "region": row.get("RegionName"),
+                "winery": row.get("WineryName"),
+                "abv": float(abv) if abv is not None and abv == abv else None,
+                "country_code": row.get("Code"),
+                "popularity_rank": rank, "explanation": why,
+                "similar_to_liked": close is not None,
+                "basis": basis, "matched": matched, "pairs_with": pairs,
+                "similar_to": (self.wines.loc[self.local_to_wine_id[close], "WineName"]
+                               if close is not None else None)}
 
     def options(self):
         """Possible answers for the questionnaire page."""
@@ -239,7 +331,11 @@ class Recommender:
                 "grapes": sorted(grapes),
                 "countries": sorted(self.ds.wines["Country"].dropna().unique()),
                 "discovery": ["explorer", "safe"],
-                "dishes": sorted(self.ds.ckg.dish_wines)}
+                "dishes": sorted(self.ds.ckg.dish_wines),
+                # what the app shows: a dozen families instead of 60 raw labels (many of
+                # them have a handful of wines), with the number of wines in each
+                "dish_families": [{"name": f, "wines": int(self._dish_mask(f).sum())}
+                                  for f in DISH_FAMILIES if self._dish_mask(f).any()]}
 
 
 def default_recommender():

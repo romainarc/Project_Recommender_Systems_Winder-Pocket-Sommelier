@@ -53,10 +53,20 @@ class WineOut(BaseModel):
     name: str
     type: str
     body: Optional[str] = None
+    acidity: Optional[str] = None
     grapes: List[str]
     country: str
+    region: Optional[str] = None
+    winery: Optional[str] = None
+    abv: Optional[float] = None
+    country_code: Optional[str] = None
     popularity_rank: int
     explanation: str
+    similar_to_liked: bool = False
+    basis: str = "popular"                   # popular / personal / taste / similar
+    matched: dict = {}                       # questionnaire answers the wine matches
+    pairs_with: Optional[str] = None         # X-Wines dish label behind the dish family
+    similar_to: Optional[str] = None         # liked wine it is close to
 
 
 class RecommendResponse(BaseModel):
@@ -107,8 +117,9 @@ def onboard(q: Questionnaire):
 
 @app.post("/recommend", response_model=RecommendResponse)
 def recommend(req: RecommendRequest):
-    if req.dish and req.dish not in OPTIONS["dishes"]:
-        raise HTTPException(404, f"unknown dish '{req.dish}', see /dishes")
+    known = set(OPTIONS["dishes"]) | {f["name"] for f in OPTIONS["dish_families"]}
+    if req.dish and req.dish not in known:
+        raise HTTPException(404, f"unknown dish '{req.dish}', see /options")
     start = time.time()
     wines = REC.recommend(req.user_id, req.dish, req.k)
     latency = round(1000 * (time.time() - start), 1)
@@ -131,3 +142,12 @@ def log_interaction(evt: InteractionIn):
         row_id = row.id
     REC.feedback(evt.user_id, evt.wine_id, evt.event_type, evt.value)   # profile update
     return {"status": "logged", "id": row_id}
+
+
+# ------------------------------------------------------------------ web app
+# The consumer app (web/, React) is built into web/dist and served here, so one command
+# (uvicorn api.main:app) starts everything: open http://localhost:8000
+WEB_DIST = ROOT / "web" / "dist"
+if WEB_DIST.exists():
+    from fastapi.staticfiles import StaticFiles  # noqa: E402
+    app.mount("/", StaticFiles(directory=WEB_DIST, html=True), name="web")

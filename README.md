@@ -51,19 +51,22 @@ watch the list change. Everything is logged in `artifacts/sommelier.db`.
 
 Checks: `python -m pytest -q`
 
-## Final model (V2) — run the demo in 2 commands
+## Final app (V2): one command
 
-The final model is committed: `artifacts/full_k10/` (HGIB-KGAT trained on X-Wines Full) and its
-data split `data/processed/full_k10/` (~23 MB). No download and no training are needed.
+The final model (`artifacts/full_k10/`, HGIB-KGAT trained on X-Wines Full) and its data split
+(`data/processed/full_k10/`, ~23 MB) are committed, and so is the built web app (`web/dist/`).
+No download, no training and no Node.js are needed:
 
 ```bash
-# terminal 1: API on the final model (it is also the default when MODEL_DIR / DATA_DIR are not set)
-MODEL_DIR=artifacts/full_k10 DATA_DIR=data/processed/full_k10 uvicorn api.main:app
-#   Windows PowerShell: $env:MODEL_DIR="artifacts/full_k10"; $env:DATA_DIR="data/processed/full_k10"; uvicorn api.main:app
-
-# terminal 2: app  ->  http://localhost:8501
-streamlit run app/streamlit_app.py
+uvicorn api.main:app        # then open http://localhost:8000
 ```
+
+The app is in French by default (English with the FR / EN button). A visitor answers six questions,
+one per screen, picks a dish among 11 families, and gets ten wines with the reason for each one;
+"J'aime", "Pas pour moi" and "En cave" update the list at once. "Nouveau visiteur" starts over
+(useful at the showcase). The old Streamlit app still works: `streamlit run app/streamlit_app.py`.
+To change the web app: `cd web && npm install && npm run dev` (http://localhost:5173, it calls the
+API on port 8000), then `npm run build` to update `web/dist/`.
 
 | | V1 (Week 3 report) | **V2 (final model)** |
 |---|---|---|

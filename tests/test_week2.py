@@ -142,3 +142,16 @@ def test_served_list_respects_the_colour(tiny_model):
     rec.onboard("g", {"color": "Red"})
     wines = rec.recommend("g", k=5)
     assert all(w["type"] == "Red" for w in wines)
+
+
+def test_app_dish_families_and_reasons(tiny_model):
+    """The web app shows dish families (not 60 raw labels) and explains each wine in data form."""
+    from sommelier.serving.predict import DISH_FAMILIES, Recommender
+    rec = Recommender(tiny_model, PROCESSED, n_guests=2)
+    families = rec.options()["dish_families"]
+    assert families and all(f["name"] in DISH_FAMILIES and f["wines"] > 0 for f in families)
+    cold = rec.recommend("nobody", families[0]["name"], k=3)
+    assert all(w["basis"] == "popular" for w in cold)            # no profile: says so
+    rec.onboard("g", {"color": "Red"})
+    wines = rec.recommend("g", families[0]["name"], k=5)
+    assert any(w["basis"] == "taste" and w["matched"].get("color") == "Red" for w in wines)
