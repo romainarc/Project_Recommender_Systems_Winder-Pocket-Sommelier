@@ -4,6 +4,7 @@
 export const STRINGS = {
   fr: {
     criteria: (m, n) => `${m}/${n} de vos critères`,
+    answered: (m, n) => `${m} réponse${m > 1 ? "s" : ""} sur ${n}`,
     withDish: (d) => `avec ${d}`,
     dishArticle: { "Red meat": "une viande rouge", Poultry: "une volaille", "Pork & charcuterie": "du porc ou de la charcuterie", Fish: "du poisson", Seafood: "des fruits de mer", "Pasta & pizza": "des pâtes ou une pizza", Vegetarian: "un plat végétarien", Cheese: "du fromage", "Spicy food": "un plat épicé", "Aperitif & snacks": "l'apéritif", Dessert: "le dessert" },
     greeting: (h) => (h < 18 ? "Bonjour." : "Bonsoir."),
@@ -107,6 +108,14 @@ export const STRINGS = {
     yourSelection: "Neuf vins pour vous, ce soir.",
     popularSelection: "Les vins les plus appréciés",
     selectionIntro: "Choisis d'après vos goûts. Dites-nous ce que vous en pensez : la sélection s'adapte.",
+    notebook: "Votre carnet", notebookEmpty: "Vos réponses s'inscrivent ici, au fil des questions.", signature: "Votre sommelier",
+    note: (p) => `Vous aimez ${p.what}${p.grape ? `, ${p.grape} en tête` : ""}${p.place ? `, plutôt ${p.place}` : ""}. ${p.style === "explorer" ? "J'ai cherché des bouteilles moins connues." : p.style === "safe" ? "Je suis resté sur des valeurs sûres." : "Voici ce que je vous servirais."}`,
+    noteWhat: (color, body) => {
+      const pl = (w) => (/[sx]$/.test(w) ? w : w + "s");
+      const c = color ? ({ "Porto & mutés": "portos et vins mutés" }[color] || pl(color.toLowerCase())) : "vins";
+      return `les ${c}${body ? " " + pl(body.toLowerCase()) : ""}`;
+    },
+    notePlace: (c) => (c === "États-Unis" ? "des États-Unis" : /^[AEIOUÉ]/.test(c) ? `d'${c}` : `de ${c}`),
     popularIntro: "Répondez à quelques questions pour une sélection qui vous ressemble.",
     personalize: "Personnaliser",
     like: "J'aime",
@@ -143,6 +152,7 @@ export const STRINGS = {
   },
   en: {
     criteria: (m, n) => `${m} of your ${n} criteria`,
+    answered: (m, n) => `${m} of ${n} answered`,
     withDish: (d) => `with ${d}`,
     dishArticle: { "Red meat": "red meat", Poultry: "poultry", "Pork & charcuterie": "pork or charcuterie", Fish: "fish", Seafood: "seafood", "Pasta & pizza": "pasta or pizza", Vegetarian: "a vegetarian dish", Cheese: "cheese", "Spicy food": "spicy food", "Aperitif & snacks": "aperitif", Dessert: "dessert" },
     greeting: (h) => (h < 18 ? "Good afternoon." : "Good evening."),
@@ -246,6 +256,10 @@ export const STRINGS = {
     yourSelection: "Nine wines for you, tonight.",
     popularSelection: "The most loved wines",
     selectionIntro: "Chosen from your taste. Tell us what you think: the selection adapts.",
+    notebook: "Your notebook", notebookEmpty: "Your answers are written here as you go.", signature: "Your sommelier",
+    note: (p) => `You like ${p.what}${p.grape ? `, ${p.grape} first` : ""}${p.place ? `, ideally from ${p.place}` : ""}. ${p.style === "explorer" ? "I looked for lesser-known bottles." : p.style === "safe" ? "I stayed with safe choices." : "Here is what I would pour you."}`,
+    noteWhat: (color, body) => [body ? body.toLowerCase() : "", color ? `${color.toLowerCase()} wines` : "wines"].filter(Boolean).join(" "),
+    notePlace: (c) => c,
     popularIntro: "Answer a few questions for a selection that fits you.",
     personalize: "Personalise",
     like: "I like it",
@@ -340,6 +354,37 @@ const COUNTRIES_FR = {
   "Czech Republic": "Tchéquie", Slovakia: "Slovaquie", Luxembourg: "Luxembourg", Cyprus: "Chypre", Peru: "Pérou",
 };
 
+
+// one-line tasting notes, so a visitor who does not know a grape can still choose
+const GRAPE_NOTES = {
+  fr: {
+    "Cabernet Sauvignon": "Cassis, cèdre, tanins fermes", Merlot: "Prune, rond et souple", "Pinot Noir": "Cerise, fin et délicat",
+    "Syrah/Shiraz": "Mûre, poivre, épices", Malbec: "Fruits noirs, velouté", Tempranillo: "Cuir, vanille, cerise",
+    Sangiovese: "Griotte, herbes, vif", Grenache: "Fraise mûre, chaleureux", Chardonnay: "Beurre, pomme, ample",
+    "Sauvignon Blanc": "Agrumes, herbe coupée", Riesling: "Citron vert, minéral", "Pinot Grigio": "Poire, léger, frais",
+    "Chenin Blanc": "Coing, miel, tendu", Viognier: "Abricot, floral", Gamay: "Fruits rouges, gouleyant",
+    Nebbiolo: "Rose, goudron, puissant", Zinfandel: "Confiture, épicé", "Carmenère": "Poivron, fruits noirs",
+  },
+  en: {
+    "Cabernet Sauvignon": "Blackcurrant, cedar, firm", Merlot: "Plum, round and supple", "Pinot Noir": "Cherry, fine and delicate",
+    "Syrah/Shiraz": "Blackberry, pepper, spice", Malbec: "Dark fruit, velvety", Tempranillo: "Leather, vanilla, cherry",
+    Sangiovese: "Sour cherry, herbs, lively", Grenache: "Ripe strawberry, warm", Chardonnay: "Butter, apple, rich",
+    "Sauvignon Blanc": "Citrus, cut grass", Riesling: "Lime, mineral", "Pinot Grigio": "Pear, light, fresh",
+    "Chenin Blanc": "Quince, honey, taut", Viognier: "Apricot, floral", Gamay: "Red fruit, easy-drinking",
+    Nebbiolo: "Rose, tar, powerful", Zinfandel: "Jammy, spicy", "Carmenère": "Green pepper, dark fruit",
+  },
+};
+export const WHITE_GRAPES = ["Chardonnay", "Sauvignon Blanc", "Riesling", "Pinot Grigio", "Chenin Blanc", "Viognier"];
+
+// famous regions per country (proper names, same in both languages)
+const COUNTRY_REGIONS = {
+  France: "Bordeaux · Bourgogne · Champagne", Italy: "Toscane · Piémont · Vénétie", Spain: "Rioja · Ribera · Priorat",
+  Portugal: "Douro · Alentejo · Vinho Verde", "United States": "Napa · Sonoma · Oregon", Argentina: "Mendoza · Salta",
+  Chile: "Maipo · Colchagua", Germany: "Moselle · Rheingau · Pfalz", Australia: "Barossa · McLaren Vale",
+  "South Africa": "Stellenbosch · Swartland", "New Zealand": "Marlborough · Otago", Austria: "Wachau · Burgenland",
+};
+const COUNTRY_REGIONS_EN = { Italy: "Tuscany · Piedmont · Veneto", Germany: "Mosel · Rheingau · Pfalz", France: "Bordeaux · Burgundy · Champagne" };
+
 export const POPULAR_COUNTRIES = [
   "France", "Italy", "Spain", "Portugal", "United States", "Argentina", "Chile", "Germany",
   "Australia", "South Africa", "New Zealand", "Austria",
@@ -360,6 +405,8 @@ export function makeT(lang) {
     dish: (v) => pick(DISHES, v),
     dishLabel: (v) => (lang === "fr" ? DISH_LABELS_FR[v] || v : (v || "").toLowerCase()),
     country: (v) => (lang === "fr" ? COUNTRIES_FR[v] || v : v),
+    grapeNote: (g) => GRAPE_NOTES[lang][g] || "",
+    regions: (c) => (lang === "en" && COUNTRY_REGIONS_EN[c]) || COUNTRY_REGIONS[c] || "",
     bodyTitle: s.body,
     acidityTitle: s.acidity,
   };

@@ -3,8 +3,9 @@ import {
   ArrowLeft, ArrowRight, Beef, Bookmark, BookmarkCheck, CakeSlice, Check, ChevronRight, Croissant, Drumstick, Fish, Flame, Ham, Heart, Milk, Pizza, Plus, RotateCcw, Salad, Search, Shell, SlidersHorizontal, UtensilsCrossed, X,
 } from "lucide-react";
 import Bottle, { Glass, Wave } from "./Bottle.jsx";
+import { GRAPE_PATH } from "./grapePath.js";
 import { api, newUserId } from "./api.js";
-import { makeT, POPULAR_COUNTRIES } from "./i18n.js";
+import { makeT, POPULAR_COUNTRIES, WHITE_GRAPES } from "./i18n.js";
 
 const DISH_ICONS = {
   "Red meat": Beef, Poultry: Drumstick, "Pork & charcuterie": Ham, Fish: Fish, Seafood: Shell,
@@ -81,29 +82,10 @@ function save(key, value) {
 
 /* ------------------------------------------------------------------ brand */
 // The mark: a fine-line wine glass that fills with wine when the page opens.
-export function LogoMark({ size = 30, animate = true }) {
-  const uid = useId().replace(/:/g, "");
-  const drop = "M16 11.6c2.5 3.2 3.8 5.4 3.8 7.1a3.8 3.8 0 0 1-7.6 0c0-1.7 1.3-3.9 3.8-7.1z";
+export function LogoMark({ size = 30, animate = true, color = "var(--brand)" }) {
   return (
-    <svg viewBox="0 0 32 32" width={size} height={size} aria-hidden="true" className={`logo-mark ${animate ? "fill-anim" : ""}`}>
-      <defs>
-        <linearGradient id={`lg${uid}`} x1="0" y1="0" x2="0.4" y2="1">
-          <stop offset="0" stopColor="#962b45" />
-          <stop offset="1" stopColor="#5a1222" />
-        </linearGradient>
-        <clipPath id={`drop${uid}`}><path d={drop} /></clipPath>
-      </defs>
-      <rect width="32" height="32" rx="9" fill={`url(#lg${uid})`} />
-      {/* the pocket */}
-      <path d="M7.5 6.5h17v12.2c0 1.1-.6 2.1-1.5 2.6L16 25.6l-7-4.3c-.9-.5-1.5-1.5-1.5-2.6z" fill="#fff" />
-      <path d="M9.6 9.4h12.8" stroke="#7a1f33" strokeOpacity="0.45" strokeWidth="0.8" strokeDasharray="1.3 1.1" strokeLinecap="round" />
-      {/* the wine drop, filling up */}
-      <path d={drop} fill="#7a1f33" opacity="0.16" />
-      <g clipPath={`url(#drop${uid})`}>
-        <g className="logo-liquid">
-          <path d="M4 15.4c2-1 4 1 6 0s4-1 6 0 4 1 6 0 4-1 6 0 4 1 6 0V26H4z" fill="#7a1f33" />
-        </g>
-      </g>
+    <svg viewBox="0 0 425 397" width={size} height={(size * 397) / 425} aria-hidden="true" className={`logo-mark ${animate ? "grow" : ""}`}>
+      <path d={GRAPE_PATH} fill={color} />
     </svg>
   );
 }
@@ -422,7 +404,7 @@ function Nav({ t, screen, cellarCount, bump, answers, profiled, opinions, onGo, 
     <header className="nav">
       <div className="nav-inner">
         <button className="brand" onClick={onHome} aria-label={t.brand}>
-          <LogoMark size={30} />
+          <LogoMark size={40} />
           <Wordmark />
         </button>
         <nav className={`seg ${onCel ? "right" : onSel ? "left" : "none"}`} aria-label="Pocket Sommelier">
@@ -575,15 +557,16 @@ function Quiz({ t, options, initial, onCancel, onFinish }) {
   const grapesFeatured = FEATURED_GRAPES.filter((g) => options.grapes.includes(g));
 
   return (
-    <section className="quiz" aria-labelledby="quiz-title">
-      <div className="quiz-head">
+    <section className="quiz quiz-split" aria-labelledby="quiz-title">
+      <aside className="notebook">
+        <p className="nb-num" key={`n-${key}`}>{String(i + 1).padStart(2, "0")}<span>/ {String(STEPS.length).padStart(2, "0")}</span></p>
         <div className="pour" aria-hidden="true">
           <span className="pour-fill" style={{ "--p": (i + 1) / STEPS.length }} />
         </div>
-        <p className="step-label">{t.step(i + 1, STEPS.length)}</p>
         <h1 id="quiz-title" key={`t-${key}`} className="swap">{title}</h1>
         <p className="quiz-help" key={`h-${key}`}>{help}</p>
-      </div>
+        <Notebook t={t} answers={a} current={key} onJump={(k) => go(STEPS.indexOf(k))} />
+      </aside>
 
       <div className={`quiz-stage dir-${dir > 0 ? "next" : "prev"}`} key={key}>
         {key === "color" && (
@@ -614,18 +597,21 @@ function Quiz({ t, options, initial, onCancel, onFinish }) {
           </div>
         )}
         {key === "grapes" && (
-          <ChipPicker t={t} all={options.grapes} featured={grapesFeatured} selected={a.grapes} max={3} label={(x) => x} onToggle={(x) => toggleMany("grapes", x, 3)} />
+          <CardPicker t={t} all={options.grapes} featured={grapesFeatured} selected={a.grapes} max={3} label={(x) => x}
+            onToggle={(x) => toggleMany("grapes", x, 3)}
+            card={(x) => (<>
+              <span className={`grape-dot ${WHITE_GRAPES.includes(x) ? "white" : ""}`} aria-hidden="true" />
+              <span className="card-name">{x.replace("/", " / ")}</span>
+              <span className="card-note">{t.grapeNote(x)}</span>
+            </>)} />
         )}
         {key === "countries" && (
-          <ChipPicker
-            t={t}
-            all={options.countries}
-            featured={POPULAR_COUNTRIES.filter((c) => options.countries.includes(c))}
-            selected={a.countries}
-            max={2}
-            label={t.country}
-            onToggle={(x) => toggleMany("countries", x, 2)}
-          />
+          <CardPicker t={t} all={options.countries} featured={POPULAR_COUNTRIES.filter((c) => options.countries.includes(c))} selected={a.countries} max={2} label={t.country}
+            onToggle={(x) => toggleMany("countries", x, 2)} wide
+            card={(x) => (<>
+              <span className="card-name serif">{t.country(x)}</span>
+              <span className="card-note">{t.regions(x)}</span>
+            </>)} />
         )}
         {key === "discovery" && (
           <div className="opts opts-2">
@@ -663,7 +649,7 @@ function Quiz({ t, options, initial, onCancel, onFinish }) {
             {t.back}
           </button>
           <div className="quiz-bar-right">
-            {!last && <button className="btn btn-quiet" onClick={() => go(i + 1)}>{t.skip}</button>}
+            {!last && <button className="btn btn-secondary" onClick={() => go(i + 1)}>{t.skip}</button>}
             <button className="btn btn-primary" onClick={() => go(i + 1)}>
               {last ? t.finish : t.next}
               <ArrowRight size={18} aria-hidden="true" />
@@ -715,6 +701,86 @@ function StyleCard({ selected, onClick, title, text, bottles, explorer }) {
       </span>
       <span className="opt-check" aria-hidden="true"><Check size={14} strokeWidth={3} /></span>
     </button>
+  );
+}
+
+// the visitor's answers, written down as they go: a live summary that can jump back to any question
+function Notebook({ t, answers: a, current, onJump }) {
+  const level = [0.3, 0.42, 0.55, 0.7, 0.82][BODY_ORDER.indexOf(a.body)] ?? (a.color ? 0.45 : 0.1);
+  const style = a.discovery === "safe" ? t.safeTitle : a.discovery === "explorer" ? t.explorerTitle : "";
+  const rows = [
+    ["color", t.pColor, a.color && t.type(a.color)],
+    ["body", t.pBody, a.body && t.body(a.body)],
+    ["acidity", t.pAcidity, a.acidity && t.acidity(a.acidity)],
+    ["grapes", t.pGrapes, a.grapes.join(", ")],
+    ["countries", t.pCountries, a.countries.map(t.country).join(", ")],
+    ["discovery", t.pStyle, style],
+  ];
+  const filled = rows.filter((r) => r[2]).length;
+  return (
+    <div className="nb-card">
+      <div className="nb-head">
+        <span className="nb-glass"><Glass level={level} tint={TYPE_DOT[a.color] || "#c9b8bb"} height={58} /></span>
+        <div>
+          <p className="nb-title">{t.notebook}</p>
+          <p className="nb-sub">{filled === 0 ? t.notebookEmpty : t.answered(filled, rows.length)}</p>
+        </div>
+      </div>
+      <ul className="nb-rows">
+        {rows.map(([k, label, v]) => (
+          <li key={k}>
+            <button className={`nb-row ${k === current ? "current" : ""} ${v ? "set" : ""}`} onClick={() => onJump(k)}>
+              <span className="nb-label">{label}</span>
+              <span className="nb-value">{v || "—"}</span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+// large cards for the well-known choices; search reaches everything else
+function CardPicker({ t, all, featured, selected, max, label, onToggle, card, wide }) {
+  const [q, setQ] = useState("");
+  const query = q.trim().toLowerCase();
+  const found = query ? all.filter((x) => label(x).toLowerCase().includes(query) || x.toLowerCase().includes(query)).slice(0, 18) : [];
+  const extra = selected.filter((x) => !featured.includes(x));
+  return (
+    <div className="picker">
+      <div className="picker-top">
+        <label className="search">
+          <Search size={18} aria-hidden="true" />
+          <input type="search" value={q} placeholder={t.search} onChange={(e) => setQ(e.target.value)} aria-label={t.search} />
+        </label>
+        <span className="picker-count">{t.upTo(max)} · {selected.length}/{max}</span>
+      </div>
+      {query ? (
+        <div className="chips">
+          {found.map((x, k) => {
+            const on = selected.includes(x);
+            return (
+              <button key={x} className={`chip ${on ? "on" : ""}`} style={{ "--d": `${k * 18}ms` }} aria-pressed={on} disabled={!on && selected.length >= max} onClick={() => onToggle(x)}>
+                {on && <Check size={15} strokeWidth={2.6} aria-hidden="true" />}{label(x)}
+              </button>
+            );
+          })}
+          {found.length === 0 && <p className="picker-empty">—</p>}
+        </div>
+      ) : (
+        <div className={`cards ${wide ? "wide" : ""}`}>
+          {[...extra, ...featured].map((x, k) => {
+            const on = selected.includes(x);
+            return (
+              <button key={x} className={`pick-card ${on ? "on" : ""}`} style={{ "--d": `${k * 22}ms` }} aria-pressed={on} disabled={!on && selected.length >= max} onClick={() => onToggle(x)}>
+                {card(x)}
+                <span className="pick-check" aria-hidden="true"><Check size={13} strokeWidth={3} /></span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -801,7 +867,7 @@ function TasteProfile({ t, answers, onQuiz }) {
     <aside className="profile-card" aria-label={t.profileCard}>
       <div className="profile-head">
         <h2>{t.profileCard}</h2>
-        <button className="btn-chevron small" onClick={onQuiz}>{t.editTaste}<ChevronRight size={15} aria-hidden="true" /></button>
+        <button className="btn btn-secondary btn-sm" onClick={onQuiz}><SlidersHorizontal size={15} aria-hidden="true" />{t.editTaste}</button>
       </div>
       <div className="profile-row">
         <span className="profile-label">{t.pColor}</span>
@@ -828,6 +894,22 @@ function TasteProfile({ t, answers, onQuiz }) {
   );
 }
 
+// a short, personal note written from the answers, signed like a sommelier's card
+function SommelierNote({ t, answers: a }) {
+  const text = t.note({
+    what: t.noteWhat(a.color && t.type(a.color), a.body && t.body(a.body)),
+    grape: a.grapes[0],
+    place: a.countries[0] && t.notePlace(t.country(a.countries[0])),
+    style: a.discovery,
+  });
+  return (
+    <figure className="som-note">
+      <blockquote>{text}</blockquote>
+      <figcaption><LogoMark size={22} animate={false} />{t.signature}</figcaption>
+    </figure>
+  );
+}
+
 function Results({ t, options, answers, profiled, opinions, dish, onDish, wines, loading, busy, justLiked, inCellar, onOpinion, onCellar, onOpen, onQuiz, error, onRetry }) {
   const hasAnswers = Object.values(answers).some((v) => (Array.isArray(v) ? v.length : v));
   const [hero, ...rest] = wines;
@@ -846,7 +928,7 @@ function Results({ t, options, answers, profiled, opinions, dish, onDish, wines,
             {profiled ? t.yourSelection : t.popularSelection}
             {dish && <span className="h1-dish" key={dish}>{t.withDish(t.dishArticle[dish] || t.dish(dish).toLowerCase())}</span>}
           </h1>
-          <p className="results-sub">{profiled ? t.selectionIntro : t.popularIntro}</p>
+          {profiled && hasAnswers ? <SommelierNote t={t} answers={answers} /> : <p className="results-sub">{profiled ? t.selectionIntro : t.popularIntro}</p>}
           {opinions > 0 && (
             <p className="learned">
               <span className="learned-dot" aria-hidden="true" />
@@ -1177,9 +1259,9 @@ function CellarPage({ t, tab, onTab, cellar, liked, suggestions, answers, busy, 
                   <p className="shelf-name">{w.name}</p>
                   <p className="shelf-place">{[t.type(w.type), t.country(w.country)].join(" · ")}</p>
                   {tab === "cellar" ? (
-                    <button className="pill pill-small" onClick={() => onCellar(w)}><Plus size={15} aria-hidden="true" />{t.add}</button>
+                    <button className="act act-cellar" onClick={() => onCellar(w)}><Bookmark size={16} aria-hidden="true" />{t.addToCellar}</button>
                   ) : (
-                    <button className="pill pill-small pill-like" onClick={() => onOpinion(w, "like")} disabled={busy === w.wine_id}><Heart size={15} aria-hidden="true" />{t.likeShort}</button>
+                    <button className="act act-like" onClick={() => onOpinion(w, "like")} disabled={busy === w.wine_id}><Heart size={16} aria-hidden="true" />{t.likeShort}</button>
                   )}
                 </div>
               ))}
