@@ -147,6 +147,7 @@ export const STRINGS = {
     noAnswers: "Pas encore de réponses",
     errorApi: "Le service de recommandation ne répond pas. Vérifiez qu'il est lancé, puis réessayez.",
     retry: "Réessayer",
+    footerApp: "Pocket Sommelier, une application Wise Winder.",
     footer: (ms) =>
       `Recommandations par un modèle de graphe (HGIB + KGAT) entraîné sur 1,7 million d'avis · réponse en ${ms} ms`,
     noResult: "Aucun vin ne correspond. Essayez un autre plat.",
@@ -292,6 +293,7 @@ export const STRINGS = {
     noAnswers: "No answers yet",
     errorApi: "The recommendation service is not responding. Check that it is running, then try again.",
     retry: "Try again",
+    footerApp: "Pocket Sommelier, a Wise Winder app.",
     footer: (ms) =>
       `Recommendations by a graph model (HGIB + KGAT) trained on 1.7 million reviews · answered in ${ms} ms`,
     noResult: "No wine matches. Try another dish.",

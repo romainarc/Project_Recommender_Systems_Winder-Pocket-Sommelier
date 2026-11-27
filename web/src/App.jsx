@@ -485,8 +485,9 @@ function Footer({ t, latency }) {
       <div className="footer-inner">
         <div className="footer-brand">
           <LogoMark size={26} animate={false} />
-          <Wordmark />
+          <span className="footer-name">Wise Winder</span>
         </div>
+        <p>{t.footerApp}</p>
         <p>{t.footer(Math.max(1, Math.round(latency || 1)))}</p>
         <p>{t.credits}</p>
       </div>
@@ -587,7 +588,7 @@ function Quiz({ t, options, initial, onCancel, onFinish }) {
   return (
     <section className="quiz quiz-split" aria-labelledby="quiz-title">
       <aside className="notebook">
-        <p className="nb-num" key={`n-${key}`}>{String(i + 1).padStart(2, "0")}<span>/ {String(STEPS.length).padStart(2, "0")}</span></p>
+        <p className="step-label">{t.step(i + 1, STEPS.length)}</p>
         <div className="pour" aria-hidden="true">
           <span className="pour-fill" style={{ "--p": (i + 1) / STEPS.length }} />
         </div>
@@ -734,7 +735,6 @@ function StyleCard({ selected, onClick, title, text, bottles, explorer }) {
 
 // the visitor's answers, written down as they go: a live summary that can jump back to any question
 function Notebook({ t, answers: a, current, onJump }) {
-  const level = [0.3, 0.42, 0.55, 0.7, 0.82][BODY_ORDER.indexOf(a.body)] ?? (a.color ? 0.45 : 0.1);
   const style = a.discovery === "safe" ? t.safeTitle : a.discovery === "explorer" ? t.explorerTitle : "";
   const rows = [
     ["color", t.pColor, a.color && t.type(a.color)],
@@ -744,16 +744,9 @@ function Notebook({ t, answers: a, current, onJump }) {
     ["countries", t.pCountries, a.countries.map(t.country).join(", ")],
     ["discovery", t.pStyle, style],
   ];
-  const filled = rows.filter((r) => r[2]).length;
   return (
     <div className="nb-card">
-      <div className="nb-head">
-        <span className="nb-glass"><Glass level={level} tint={TYPE_DOT[a.color] || "#c9b8bb"} height={58} /></span>
-        <div>
-          <p className="nb-title">{t.notebook}</p>
-          <p className="nb-sub">{filled === 0 ? t.notebookEmpty : t.answered(filled, rows.length)}</p>
-        </div>
-      </div>
+      <p className="nb-title">{t.notebook}</p>
       <ul className="nb-rows">
         {rows.map(([k, label, v]) => (
           <li key={k}>

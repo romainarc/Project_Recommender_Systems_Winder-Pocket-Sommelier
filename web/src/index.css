@@ -17,9 +17,9 @@
   --line-soft: #ebe8e3;
   --gold: #8a6630;
   --ok: #1d7a46;
-  --sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Helvetica Neue", Arial, sans-serif;
-  --serif: "Instrument Serif", "Iowan Old Style", Georgia, serif;
-  --display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", "Helvetica Neue", Arial, sans-serif;
+  --sans: "DM Sans", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+  --serif: var(--sans);
+  --display: var(--sans);
   --nav-h: 56px;
   --ease: cubic-bezier(0.25, 0.1, 0.25, 1);
   --spring: cubic-bezier(0.2, 0.8, 0.2, 1);
@@ -581,3 +581,39 @@ main { width: 100%; }
 /* exits faster than entrances */
 .toast { transition: transform 0.35s var(--spring), opacity 0.2s var(--ease); }
 .skip-link { min-height: 44px; display: inline-flex; align-items: center; }
+
+/* ------------------------------------------------ round 9: calmer questionnaire, footer */
+.footer-name { font-weight: 600; font-size: 1.05rem; letter-spacing: -0.01em; color: var(--ink); }
+.quiz-split .step-label { color: var(--brand); font-weight: 600; font-size: 0.85rem; }
+.quiz-split .pour { height: 4px; margin: 2px 0 10px; }
+.nb-card { background: none; border: 0; box-shadow: none; padding: 0; margin-top: auto; border-top: 1px solid var(--line-soft); padding-top: 14px; }
+.nb-title { font-family: var(--sans); font-size: 0.75rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+.nb-row { padding: 7px 0; border-radius: 0; border-bottom: 1px solid var(--line-soft); }
+.nb-rows li:last-child .nb-row { border-bottom: 0; }
+.nb-row:hover { background: none; }
+.nb-row:hover .nb-label { color: var(--ink); }
+.nb-row.current { background: none; }
+
+/* ------------------------------------------------ round 10: one simple font (DM Sans), no italics */
+body { letter-spacing: -0.005em; }
+.welcome h1, .results-head h1, .hero-info h2, .cellar-head h1, .quiz-split h1, .quiz-head h1, .composing-title, .sheet-info h2, .section-head h2, .style-title {
+  font-weight: 700; letter-spacing: -0.035em;
+}
+.welcome h1 { font-size: clamp(2.8rem, min(6.4vw, 9vh), 5rem); line-height: 1.02; }
+.welcome h1 .word:last-child { font-style: normal; }
+.results-head h1 { font-size: clamp(2.4rem, 4.4vw, 3.6rem); line-height: 1.04; }
+.hero-info h2 { font-size: clamp(2rem, 3vw, 2.6rem); line-height: 1.06; }
+.cellar-head h1 { font-size: clamp(2.5rem, 4.8vw, 3.8rem); }
+.quiz-split h1 { font-size: clamp(1.9rem, 2.8vw, 2.5rem); line-height: 1.08; }
+.sheet-info h2 { font-size: 2.1rem; }
+.section-head h2 { font-size: 1.7rem; }
+.style-title { font-size: 1.55rem; }
+.h1-dish { font-style: normal; font-weight: 700; font-size: 0.62em; letter-spacing: -0.03em; }
+.greeting { font-style: normal; font-weight: 600; font-size: 1rem; }
+.som-note blockquote { font-style: normal; font-size: 1.12rem; line-height: 1.5; color: var(--ink-2); }
+.hero-why { font-style: normal; font-size: 1rem; line-height: 1.5; }
+.card-name.serif { font-weight: 700; font-size: 1.25rem; letter-spacing: -0.02em; }
+.wordmark { font-weight: 700; font-size: 1.3rem; letter-spacing: -0.03em; }
+.wordmark em { font-style: normal; font-weight: 500; }
+.nb-title { font-family: var(--sans); }
+.nb-card { margin-top: 28px; }
